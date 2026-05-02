@@ -15,13 +15,11 @@ export default function FloatingActionButtons({ onSpyPress, onMailboxPress }: Pr
         onPress={onSpyPress}
         accessibilityRole="button"
         accessibilityLabel="염탐하기 — 상대방에게 사진 인증 요청 보내기">
-        <View style={styles.circle}>
-          <Image
-            source={require('../../../assets/images/spy-icon.png')}
-            style={styles.icon}
-            resizeMode="contain"
-          />
-        </View>
+        <Image
+          source={require('../../../assets/images/spy-icon.png')}
+          style={styles.icon}
+          resizeMode="contain"
+        />
         <Text style={styles.label}>염탐하기</Text>
       </Pressable>
 
@@ -30,13 +28,11 @@ export default function FloatingActionButtons({ onSpyPress, onMailboxPress }: Pr
         onPress={onMailboxPress}
         accessibilityRole="button"
         accessibilityLabel="우체통 — 사과문 기록 보기">
-        <View style={styles.circle}>
-          <Image
-            source={require('../../../assets/images/mailbox-icon.png')}
-            style={styles.icon}
-            resizeMode="contain"
-          />
-        </View>
+        <Image
+          source={require('../../../assets/images/mailbox-icon.png')}
+          style={styles.icon}
+          resizeMode="contain"
+        />
         <Text style={styles.label}>우체통</Text>
       </Pressable>
     </View>
@@ -56,28 +52,14 @@ const styles = StyleSheet.create({
   btn: {
     alignItems: 'center',
     gap: 5,
+    padding: 8,
   },
   btnPressed: {
     opacity: 0.68,
   },
-  circle: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: 'rgba(248, 240, 235, 0.88)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#5d4e45',
-    shadowOpacity: 0.22,
-    shadowOffset: { width: 0, height: 3 },
-    shadowRadius: 8,
-    elevation: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(189, 159, 145, 0.35)',
-  },
   icon: {
-    width: 24,
-    height: 24,
+    width: 44,
+    height: 44,
   },
   label: {
     fontSize: 11,
