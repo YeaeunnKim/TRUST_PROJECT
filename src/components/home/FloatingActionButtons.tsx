@@ -1,72 +1,48 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
-
-import CameraCaptureModal from '@/src/components/camera/CameraCaptureModal';
-import { createVerificationRequest } from '@/src/lib/verificationRequests';
-
-// TODO: Replace with real user IDs from auth context once backend is ready.
-const MOCK_REQUESTER_ID = 'user_me';
-const MOCK_TARGET_ID = 'user_partner';
 
 type Props = {
   onToast: (message: string) => void;
+  onSpyPress?: () => void | Promise<void>;
 };
 
-export default function FloatingActionButtons({ onToast }: Props) {
-  const [cameraModalOpen, setCameraModalOpen] = useState(false);
-  const [currentRequestId, setCurrentRequestId] = useState('');
-
-  const handleSpyPress = useCallback(async () => {
-    try {
-      const req = await createVerificationRequest(MOCK_REQUESTER_ID, MOCK_TARGET_ID);
-      setCurrentRequestId(req.id);
-      setCameraModalOpen(true);
-    } catch {
-      onToast('요청을 만들 수 없어요. 다시 시도해 주세요.');
-    }
-  }, [onToast]);
-
+export default function FloatingActionButtons({ onToast, onSpyPress }: Props) {
   const handleSendClick = useCallback(() => {
     onToast('우편함 기능은 곧 추가될 예정이에요.');
   }, [onToast]);
 
   return (
-    <>
-      <View style={styles.container} pointerEvents="box-none">
-        <Pressable
-          style={({ pressed }) => [styles.btn, pressed && styles.btnPressed]}
-          onPress={handleSpyPress}
-          accessibilityRole="button"
-          accessibilityLabel="염탐하기 — 상대방에게 사진 인증 요청 보내기">
-          <View style={styles.circle}>
-            <Image source={require('../../../assets/images/spy-icon.png')} style={styles.icon} resizeMode="contain" />
-          </View>
-          <Text style={styles.label}>염탐하기</Text>
-        </Pressable>
+    <View style={styles.container} pointerEvents="box-none">
+      <Pressable
+        style={({ pressed }) => [styles.btn, pressed && styles.btnPressed]}
+        onPress={onSpyPress}
+        accessibilityRole="button"
+        accessibilityLabel="염탐하기 — 상대방에게 사진 인증 요청 보내기">
+        <View style={styles.circle}>
+          <Image
+            source={require('../../../assets/images/spy-icon.png')}
+            style={styles.icon}
+            resizeMode="contain"
+          />
+        </View>
+        <Text style={styles.label}>염탐하기</Text>
+      </Pressable>
 
-        <Pressable
-          style={({ pressed }) => [styles.btn, pressed && styles.btnPressed]}
-          onPress={handleSendClick}
-          accessibilityRole="button"
-          accessibilityLabel="우체통 — 우편함 기능 (준비 중)">
-          <View style={styles.circle}>
-            <Image source={require('../../../assets/images/mailbox-icon.png')} style={styles.icon} resizeMode="contain" />
-          </View>
-          <Text style={styles.label}>우체통</Text>
-        </Pressable>
-      </View>
-
-      <CameraCaptureModal
-        visible={cameraModalOpen}
-        requestId={currentRequestId}
-        onClose={() => setCameraModalOpen(false)}
-        onUploaded={(url) => {
-          console.log('[FloatingActionButtons] photo uploaded:', url);
-          setCameraModalOpen(false);
-          onToast('사진이 전달됐어요!');
-        }}
-      />
-    </>
+      <Pressable
+        style={({ pressed }) => [styles.btn, pressed && styles.btnPressed]}
+        onPress={handleSendClick}
+        accessibilityRole="button"
+        accessibilityLabel="우체통 — 우편함 기능 (준비 중)">
+        <View style={styles.circle}>
+          <Image
+            source={require('../../../assets/images/mailbox-icon.png')}
+            style={styles.icon}
+            resizeMode="contain"
+          />
+        </View>
+        <Text style={styles.label}>우체통</Text>
+      </Pressable>
+    </View>
   );
 }
 

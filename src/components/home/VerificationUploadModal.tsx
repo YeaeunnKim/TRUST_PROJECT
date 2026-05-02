@@ -16,20 +16,24 @@ import { uploadVerificationPhoto } from '@/src/lib/verificationRequests';
 type Props = {
   visible: boolean;
   requestId: string;
-  onClose: () => void;
-  onUploaded: (imageUrl: string) => void;
+  onUploaded: () => void;
+  onDismiss: () => void;
 };
 
-type Phase = 'consent' | 'camera' | 'preview' | 'uploading' | 'done' | 'error';
+type Phase = 'prompt' | 'camera' | 'preview' | 'uploading' | 'done' | 'error';
 
-export default function CameraCaptureModal({ visible, requestId, onClose, onUploaded }: Props) {
-  const [phase, setPhase] = useState<Phase>('consent');
-  const [cameraError, setCameraError] = useState('');
-  const [capturedDataUrl, setCapturedDataUrl] = useState<string | null>(null);
+export default function VerificationUploadModal({
+  visible,
+  requestId,
+  onUploaded,
+  onDismiss,
+}: Props) {
+  const [phase, setPhase] = useState<Phase>('prompt');
+  const [capturedUri, setCapturedUri] = useState<string | null>(null);
   const [capturedBlob, setCapturedBlob] = useState<Blob | null>(null);
+  const [errorMsg, setErrorMsg] = useState('');
   const [uploadError, setUploadError] = useState('');
 
-  // Web-only refs
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -44,19 +48,16 @@ export default function CameraCaptureModal({ visible, requestId, onClose, onUplo
   useEffect(() => {
     if (!visible) {
       stopStream();
-      setPhase('consent');
-      setCameraError('');
-      setCapturedDataUrl(null);
+      setPhase('prompt');
+      setCapturedUri(null);
       setCapturedBlob(null);
+      setErrorMsg('');
       setUploadError('');
     }
   }, [visible, stopStream]);
 
-  // ── Web camera ──────────────────────────────────────────────────────────────
-
   const startWebCamera = useCallback(async () => {
-    if (Platform.OS !== 'web') return;
-    setCameraError('');
+    setErrorMsg('');
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: 'environment' } },
@@ -70,9 +71,9 @@ export default function CameraCaptureModal({ visible, requestId, onClose, onUplo
     } catch (err) {
       const msg =
         err instanceof DOMException && err.name === 'NotAllowedError'
-          ? '카메라 권한이 거부되었어요. 브라우저 설정에서 카메라 접근을 허용해 주세요.'
-          : '카메라를 열 수 없어요. 다른 앱이 카메라를 사용 중인지 확인해 주세요.';
-      setCameraError(msg);
+          ? '카메라 권한이 거부됐어요. 브라우저 설정에서 허용해 주세요.'
+          : '카메라를 열 수 없어요.';
+      setErrorMsg(msg);
       setPhase('error');
     }
   }, []);
@@ -81,32 +82,28 @@ export default function CameraCaptureModal({ visible, requestId, onClose, onUplo
     const video = videoRef.current;
     const canvas = canvasRef.current;
     if (!video || !canvas) return;
-
     canvas.width = video.videoWidth || 640;
     canvas.height = video.videoHeight || 480;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.drawImage(video, 0, 0);
-
     canvas.toBlob(
       (blob) => {
         if (!blob) return;
         setCapturedBlob(blob);
-        setCapturedDataUrl(canvas.toDataURL('image/jpeg', 0.9));
+        setCapturedUri(canvas.toDataURL('image/jpeg', 0.9));
         stopStream();
         setPhase('preview');
       },
       'image/jpeg',
-      0.9
+      0.9,
     );
   }, [stopStream]);
-
-  // ── Mobile camera (expo-image-picker) ───────────────────────────────────────
 
   const startMobileCamera = useCallback(async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
-      setCameraError('카메라 권한이 거부되었어요. 기기 설정에서 카메라 접근을 허용해 주세요.');
+      setErrorMsg('카메라 권한이 필요해요. 기기 설정에서 허용해 주세요.');
       setPhase('error');
       return;
     }
@@ -116,87 +113,78 @@ export default function CameraCaptureModal({ visible, requestId, onClose, onUplo
       cameraType: ImagePicker.CameraType.back,
     });
     if (result.canceled) {
-      onClose();
+      setPhase('prompt');
       return;
     }
     const asset = result.assets[0];
-    // Convert URI to blob for upload
     try {
-      const response = await fetch(asset.uri);
-      const blob = await response.blob();
+      const res = await fetch(asset.uri);
+      const blob = await res.blob();
       setCapturedBlob(blob);
-      setCapturedDataUrl(asset.uri);
+      setCapturedUri(asset.uri);
       setPhase('preview');
     } catch {
-      setCameraError('사진을 처리하는 중 오류가 발생했어요.');
+      setErrorMsg('사진을 처리하는 중 오류가 발생했어요.');
       setPhase('error');
     }
-  }, [onClose]);
+  }, []);
 
   const handleStartCamera = useCallback(() => {
-    if (Platform.OS === 'web') {
-      startWebCamera();
-    } else {
-      startMobileCamera();
-    }
+    if (Platform.OS === 'web') startWebCamera();
+    else startMobileCamera();
   }, [startWebCamera, startMobileCamera]);
 
   const handleRetake = useCallback(() => {
-    setCapturedDataUrl(null);
+    setCapturedUri(null);
     setCapturedBlob(null);
-    setCameraError('');
     setUploadError('');
-    if (Platform.OS === 'web') {
-      setPhase('camera');
-      // restart stream
-      startWebCamera();
-    } else {
-      startMobileCamera();
-    }
+    if (Platform.OS === 'web') startWebCamera();
+    else startMobileCamera();
   }, [startWebCamera, startMobileCamera]);
 
-  const handleUpload = useCallback(async () => {
+  const handleSend = useCallback(async () => {
     if (!capturedBlob) return;
     setPhase('uploading');
     setUploadError('');
     try {
-      const { imageUrl } = await uploadVerificationPhoto(requestId, capturedBlob);
+      await uploadVerificationPhoto(requestId, capturedBlob);
       setPhase('done');
-      onUploaded(imageUrl);
+      onUploaded();
     } catch {
-      setUploadError('업로드에 실패했어요. 다시 시도해 주세요.');
+      setUploadError('사진 업로드에 실패했어요. 다시 시도해주세요.');
       setPhase('preview');
     }
   }, [capturedBlob, requestId, onUploaded]);
 
-  // ── Render ──────────────────────────────────────────────────────────────────
-
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onDismiss}>
       <View style={styles.overlay}>
         <View style={styles.sheet}>
-          <Pressable style={styles.closeBtn} onPress={onClose} accessibilityLabel="닫기">
-            <Ionicons name="close" size={22} color="#7b6c62" />
-          </Pressable>
+          {phase !== 'uploading' && phase !== 'done' && (
+            <Pressable style={styles.closeBtn} onPress={onDismiss} accessibilityLabel="닫기">
+              <Ionicons name="close" size={22} color="#7b6c62" />
+            </Pressable>
+          )}
 
-          {/* ── CONSENT ── */}
-          {phase === 'consent' && (
+          {phase === 'prompt' && (
             <View style={styles.section}>
               <Ionicons name="eye-outline" size={40} color="#c4a882" />
-              <Text style={styles.title}>확인 요청</Text>
+              <Text style={styles.title}>사진 인증 요청이 도착했어요</Text>
               <Text style={styles.body}>
-                {'상대방의 확인 요청이에요.\n동의하면 사진을 촬영해 업로드하세요.'}
+                {'상대방이 지금 상황 확인을 요청했어요.\n동의하면 사진을 촬영해 전송해주세요.'}
               </Text>
               <Pressable
                 style={styles.primaryBtn}
                 onPress={handleStartCamera}
-                accessibilityLabel="카메라 열기">
-                <Text style={styles.primaryBtnText}>카메라 열기</Text>
+                accessibilityLabel="사진 찍기">
+                <Text style={styles.primaryBtnText}>사진 찍기</Text>
+              </Pressable>
+              <Pressable style={styles.ghostBtn} onPress={onDismiss} accessibilityLabel="나중에">
+                <Text style={styles.ghostBtnText}>나중에</Text>
               </Pressable>
             </View>
           )}
 
-          {/* ── WEB CAMERA LIVE ── */}
           {phase === 'camera' && Platform.OS === 'web' && (
             <View style={styles.section}>
               <video
@@ -217,18 +205,16 @@ export default function CameraCaptureModal({ visible, requestId, onClose, onUplo
             </View>
           )}
 
-          {/* ── PREVIEW ── */}
-          {phase === 'preview' && capturedDataUrl && (
+          {phase === 'preview' && capturedUri && (
             <View style={styles.section}>
               <Text style={styles.title}>사진 미리보기</Text>
               {Platform.OS === 'web' ? (
                 <img
-                  src={capturedDataUrl}
+                  src={capturedUri}
                   style={styles.previewImg as unknown as React.CSSProperties}
                   alt="촬영된 사진"
                 />
               ) : (
-                // eslint-disable-next-line @typescript-eslint/no-require-imports
                 <View style={styles.previewPlaceholder}>
                   <Text style={styles.previewPlaceholderText}>사진 준비됨</Text>
                 </View>
@@ -243,41 +229,37 @@ export default function CameraCaptureModal({ visible, requestId, onClose, onUplo
                 </Pressable>
                 <Pressable
                   style={[styles.halfBtn, styles.primaryBtn]}
-                  onPress={handleUpload}
-                  accessibilityLabel="업로드하기">
-                  <Text style={styles.primaryBtnText}>업로드하기</Text>
+                  onPress={() => void handleSend()}
+                  accessibilityLabel="전송하기">
+                  <Text style={styles.primaryBtnText}>전송하기</Text>
                 </Pressable>
               </View>
             </View>
           )}
 
-          {/* ── UPLOADING ── */}
           {phase === 'uploading' && (
             <View style={styles.section}>
               <ActivityIndicator size="large" color="#c4a882" />
-              <Text style={[styles.body, { marginTop: 16 }]}>업로드 중이에요...</Text>
+              <Text style={[styles.body, { marginTop: 16 }]}>전송 중이에요...</Text>
             </View>
           )}
 
-          {/* ── DONE ── */}
           {phase === 'done' && (
             <View style={styles.section}>
               <Ionicons name="checkmark-circle" size={48} color="#9fc7a0" />
-              <Text style={styles.title}>업로드 완료!</Text>
-              <Text style={styles.body}>사진이 성공적으로 전달됐어요.</Text>
-              <Pressable style={styles.primaryBtn} onPress={onClose} accessibilityLabel="확인">
+              <Text style={styles.title}>사진을 전송했어요.</Text>
+              <Pressable style={styles.primaryBtn} onPress={onDismiss} accessibilityLabel="확인">
                 <Text style={styles.primaryBtnText}>확인</Text>
               </Pressable>
             </View>
           )}
 
-          {/* ── ERROR ── */}
           {phase === 'error' && (
             <View style={styles.section}>
               <Ionicons name="alert-circle-outline" size={40} color="#d4927a" />
               <Text style={styles.title}>카메라 오류</Text>
-              <Text style={styles.body}>{cameraError}</Text>
-              <Pressable style={styles.primaryBtn} onPress={onClose} accessibilityLabel="닫기">
+              <Text style={styles.body}>{errorMsg}</Text>
+              <Pressable style={styles.primaryBtn} onPress={onDismiss} accessibilityLabel="닫기">
                 <Text style={styles.primaryBtnText}>닫기</Text>
               </Pressable>
             </View>
@@ -313,10 +295,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   } as const,
-  section: {
-    alignItems: 'center',
-    gap: 12,
-  },
+  section: { alignItems: 'center', gap: 12 },
   title: {
     fontSize: 17,
     fontWeight: '700',
@@ -324,12 +303,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 4,
   },
-  body: {
-    fontSize: 13,
-    color: '#7b6c62',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
+  body: { fontSize: 13, color: '#7b6c62', textAlign: 'center', lineHeight: 20 },
   primaryBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -341,11 +315,7 @@ const styles = StyleSheet.create({
     width: '100%',
     marginTop: 4,
   },
-  primaryBtnText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#5d4e45',
-  },
+  primaryBtnText: { fontSize: 14, fontWeight: '600', color: '#5d4e45' },
   ghostBtn: {
     height: 46,
     borderRadius: 18,
@@ -357,19 +327,9 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(189, 159, 145, 0.5)',
     width: '100%',
   },
-  ghostBtnText: {
-    fontSize: 13,
-    color: '#9a8a7d',
-  },
-  row: {
-    flexDirection: 'row',
-    gap: 10,
-    width: '100%',
-    marginTop: 4,
-  },
-  halfBtn: {
-    flex: 1,
-  },
+  ghostBtnText: { fontSize: 13, color: '#9a8a7d' },
+  row: { flexDirection: 'row', gap: 10, width: '100%', marginTop: 4 },
+  halfBtn: { flex: 1 },
   webVideo: {
     width: '100%',
     maxWidth: 340,
@@ -393,13 +353,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  previewPlaceholderText: {
-    fontSize: 13,
-    color: '#9a8a7d',
-  },
-  errorText: {
-    fontSize: 12,
-    color: '#9a6252',
-    textAlign: 'center',
-  },
+  previewPlaceholderText: { fontSize: 13, color: '#9a8a7d' },
+  errorText: { fontSize: 12, color: '#9a6252', textAlign: 'center' },
 });
