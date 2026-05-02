@@ -62,6 +62,9 @@ export default function MessageScreen() {
   const handleRegister = async () => {
     const record = { title: title.trim(), body: draft.trim() };
     await saveApology(todayKey, record);
+    setTitle('');
+    setDraft('');
+    setAnalysis(null);
     setNotice('사과문이 등록되었습니다. 사과문 기록 페이지로 이동합니다.');
     router.push('/(tabs)/message/history');
   };
