@@ -10,6 +10,7 @@ import VerificationReviewModal from '@/src/components/home/VerificationReviewMod
 import VerificationUploadModal from '@/src/components/home/VerificationUploadModal';
 import Nest from '@/src/components/Nest';
 import SettingsMenu from '@/src/components/SettingsMenu';
+import SleepModeToggle from '@/src/components/home/SleepModeToggle';
 import TopBar from '@/src/components/TopBar';
 import { useAuth } from '@/src/context/auth-context';
 import { useCouple } from '@/src/context/couple-context';
@@ -320,6 +321,10 @@ export default function HomeScreen() {
         <View style={styles.roomLayer}>
           <TopBar style={styles.topBarAdjust} onPressSettings={() => setSettingsOpen(true)} />
 
+          <View style={styles.sleepToggleRow}>
+            <SleepModeToggle />
+          </View>
+
           <View style={styles.heroArea} pointerEvents="box-none">
             <View style={styles.sceneWrap}>
               <Animated.View
@@ -414,6 +419,11 @@ const styles = StyleSheet.create({
   topBarAdjust: {
     marginHorizontal: -14,
     marginTop: -14,
+  },
+  sleepToggleRow: {
+    marginTop: 6,
+    marginBottom: 4,
+    paddingHorizontal: 4,
   },
   heroArea: {
     flex: 1,

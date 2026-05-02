@@ -1,14 +1,29 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import CameraCaptureModal from '@/src/components/camera/CameraCaptureModal';
 import PebbleAnimation from '@/src/components/animation/PebbleAnimation';
+import { useAuth } from '@/src/context/auth-context';
+import { useCouple } from '@/src/context/couple-context';
+import { usePresence, type PebbleOutcome } from '@/src/context/presence-context';
 import { createVerificationRequest } from '@/src/lib/verificationRequests';
 
 // TODO: Replace with real current user ID from auth context once verification backend is ready.
 const MOCK_REQUESTER_ID = 'user_me';
 const MOCK_TARGET_ID = 'user_partner';
+
+function pebbleOutcomeMessage(outcome: PebbleOutcome): string {
+  switch (outcome.outcome) {
+    case 'bounced':
+      return '상대가 자고 있어 돌이 튕겨나갔어요.';
+    case 'hit':
+      return `잠자는 척하고 있었어요! 신뢰도 ${outcome.trustChange}점 (현재 ${outcome.targetTrustScore})`;
+    case 'no_op':
+    default:
+      return '상대 병아리에게 콕 알림을 보냈어요.';
+  }
+}
 
 type ToastState = { message: string; key: number } | null;
 
@@ -33,17 +48,20 @@ function InlineToast({ toast }: { toast: ToastState }) {
   );
 }
 
-/** Sends a pebble/nudge notification to the partner. */
-async function sendPebbleNotification(_targetUserId: string): Promise<void> {
-  // TODO: POST /api/notifications/pebble with { targetUserId } once notification backend is ready.
-  console.log('[sendPebbleNotification] nudge sent to', _targetUserId);
-}
-
 export default function HomeActionButtons() {
+  const { user } = useAuth();
+  const { myCouple } = useCouple();
+  const { throwPebble } = usePresence();
   const [cameraModalOpen, setCameraModalOpen] = useState(false);
   const [currentRequestId, setCurrentRequestId] = useState('');
   const [isPebbleAnimating, setIsPebbleAnimating] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
+  const lastOutcomeRef = useRef<PebbleOutcome | null>(null);
+
+  const partnerId = useMemo(() => {
+    if (!user || !myCouple) return null;
+    return myCouple.members.find((m) => m.userId !== user.id)?.userId ?? null;
+  }, [user, myCouple]);
 
   const showToast = useCallback((message: string) => {
     setToast({ message, key: Date.now() });
@@ -77,13 +95,27 @@ export default function HomeActionButtons() {
 
   const handlePebblePress = useCallback(async () => {
     if (isPebbleAnimating) return;
+    if (!partnerId) {
+      showToast('먼저 커플을 연결해주세요.');
+      return;
+    }
     setIsPebbleAnimating(true);
-    await sendPebbleNotification(MOCK_TARGET_ID);
-  }, [isPebbleAnimating]);
+    try {
+      const outcome = await throwPebble(partnerId);
+      lastOutcomeRef.current = outcome;
+    } catch (e) {
+      lastOutcomeRef.current = null;
+      showToast(e instanceof Error ? e.message : '돌을 던지지 못했어요.');
+    }
+  }, [isPebbleAnimating, partnerId, throwPebble, showToast]);
 
   const handlePebbleAnimationEnd = useCallback(() => {
     setIsPebbleAnimating(false);
-    showToast('상대 병아리에게 콕 알림을 보냈어요.');
+    const outcome = lastOutcomeRef.current;
+    if (outcome) {
+      showToast(pebbleOutcomeMessage(outcome));
+      lastOutcomeRef.current = null;
+    }
   }, [showToast]);
 
   // ── 보내기 ────────────────────────────────────────────────────────────────
