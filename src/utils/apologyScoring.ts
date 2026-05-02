@@ -11,7 +11,6 @@ export type ApologyScoreResult = {
   breakdown: ApologyBreakdown;
   summary: string;
   weakPoints: string[];
-  improvedApology: string;
 };
 
 export const APOLOGY_BREAKDOWN_MAX: ApologyBreakdown = {
@@ -54,7 +53,6 @@ export function fallbackScoreApology(text: string): ApologyScoreResult {
       breakdown: { responsibility: 0, specificity: 0, empathy: 0, noExcuse: 0, prevention: 0 },
       summary: '사과문이 비어 있습니다.',
       weakPoints: ['사과 내용을 직접 작성해 주세요.'],
-      improvedApology: '',
     };
   }
 
@@ -63,6 +61,7 @@ export function fallbackScoreApology(text: string): ApologyScoreResult {
   const empathyHits = countMatches(trimmed, EMPATHY_WORDS);
   const preventionHits = countMatches(trimmed, PREVENTION_WORDS);
   const specificityHits = countMatches(trimmed, SPECIFICITY_HINTS) + (len > 80 ? 2 : 0);
+  const detectedExcuses = EXCUSE_WORDS.filter((w) => trimmed.includes(w));
   const excuseHits = countMatches(trimmed, EXCUSE_WORDS);
 
   const breakdown: ApologyBreakdown = {
@@ -82,25 +81,61 @@ export function fallbackScoreApology(text: string): ApologyScoreResult {
   );
 
   const weakPoints: string[] = [];
-  if (breakdown.responsibility < APOLOGY_BREAKDOWN_MAX.responsibility * 0.5)
-    weakPoints.push('내가 무엇을 잘못했는지 1인칭으로 분명히 짚어주세요.');
-  if (breakdown.specificity < APOLOGY_BREAKDOWN_MAX.specificity * 0.5)
-    weakPoints.push('어떤 상황에서, 무슨 행동이 문제였는지 구체적으로 적어주세요.');
-  if (breakdown.empathy < APOLOGY_BREAKDOWN_MAX.empathy * 0.5)
-    weakPoints.push('상대가 느꼈을 감정을 직접 언급해 주세요. 예: 속상, 불안, 서운.');
-  if (breakdown.noExcuse < APOLOGY_BREAKDOWN_MAX.noExcuse * 0.5)
-    weakPoints.push("'근데', '네가 예민해서', '어쩔 수 없었어' 류의 표현은 피해주세요.");
-  if (breakdown.prevention < APOLOGY_BREAKDOWN_MAX.prevention * 0.5)
-    weakPoints.push('다음에 어떻게 다르게 행동할지 한 문장이라도 약속해 주세요.');
+
+  if (breakdown.responsibility < APOLOGY_BREAKDOWN_MAX.responsibility * 0.5) {
+    weakPoints.push(
+      responsibilityHits === 0
+        ? "‘내가/제가’로 시작하는 1인칭 문장이 보이지 않아요. 잘못의 주체가 누구인지부터 분명히 짚어보세요."
+        : '책임 인정 표현이 약해 보여요. 모호한 표현 대신 ‘내가 ~해서 미안해’처럼 무엇을 잘못했는지 한 문장으로 정리해보세요.',
+    );
+  }
+
+  if (breakdown.specificity < APOLOGY_BREAKDOWN_MAX.specificity * 0.5) {
+    weakPoints.push(
+      '어떤 상황(언제·어디서·어떤 행동)이 문제였는지가 흐려요. 상대가 그 순간을 떠올릴 수 있도록 디테일을 한 가지만 더 더해보세요.',
+    );
+  }
+
+  if (breakdown.empathy < APOLOGY_BREAKDOWN_MAX.empathy * 0.5) {
+    weakPoints.push(
+      '상대가 느꼈을 감정이 직접 인정되지 않았어요. 짐작 표현 말고 ‘많이 속상했을 것 같아’처럼 감정을 단어로 짚어보세요.',
+    );
+  }
+
+  if (breakdown.noExcuse < APOLOGY_BREAKDOWN_MAX.noExcuse * 0.5) {
+    if (detectedExcuses.length > 0) {
+      const sample = detectedExcuses
+        .slice(0, 3)
+        .map((w) => `‘${w}’`)
+        .join(', ');
+      weakPoints.push(
+        `${sample} 같은 표현이 변명처럼 읽힐 수 있어요. 정말 필요한 정보인지 다시 보고, 사과와 분리해서 적어보세요.`,
+      );
+    } else {
+      weakPoints.push(
+        '이유를 설명하느라 사과의 무게가 흐려져 있어요. 이유와 사과를 분리해서, 사과 부분만 먼저 한 줄로 적어보세요.',
+      );
+    }
+  }
+
+  if (breakdown.prevention < APOLOGY_BREAKDOWN_MAX.prevention * 0.5) {
+    weakPoints.push(
+      '앞으로 어떻게 다를지가 빠져 있어요. ‘잘할게’ 같은 추상적 다짐 대신 ‘어떤 상황에서 무엇을 바꿀지’ 한 가지를 떠올려보세요.',
+    );
+  }
+
+  if (len < 40) {
+    weakPoints.push(
+      '사과문이 다소 짧아요. 잘못한 일·상대 마음·앞으로의 변화 — 세 가지 중 빠진 게 있는지 한 번 더 살펴보세요.',
+    );
+  }
 
   const summary =
     totalScore >= 80
-      ? '사과문이 비교적 진정성 있게 구성되어 있습니다.'
+      ? '전반적으로 진정성 있는 사과문입니다. 마지막으로 빠진 디테일이 있는지 한 번만 더 훑어보세요.'
       : totalScore >= 50
-        ? '기본적인 책임 인정은 있지만 보완할 부분이 있습니다.'
-        : '현재 사과문은 책임 인정과 구체성이 부족합니다.';
-
-  const improvedApology = buildImprovedApology(trimmed, weakPoints);
+        ? '책임 인정의 뼈대는 잡혀 있어요. 아래 항목 중 한두 개를 직접 다시 써본다고 생각해보세요.'
+        : '아직 사과의 핵심이 채워지지 않았어요. 어떤 부분이 빠졌는지 항목별로 다시 짚어보세요.';
 
   return {
     totalScore,
@@ -108,24 +143,8 @@ export function fallbackScoreApology(text: string): ApologyScoreResult {
     summary,
     weakPoints: weakPoints.length
       ? weakPoints
-      : ['전반적으로 양호합니다. 한 문장으로 재발 방지를 더해도 좋습니다.'],
-    improvedApology,
+      : ['항목별 점수는 균형 있게 채워졌어요. 더 다듬는다면 어떤 부분을 더 깊게 적고 싶은지 스스로에게 물어보세요.'],
   };
-}
-
-function buildImprovedApology(original: string, weakPoints: string[]): string {
-  const oneLine = original.replace(/\s+/g, ' ').trim();
-  const lead = oneLine.length > 60 ? oneLine.slice(0, 60) + '…' : oneLine;
-  const hasResp = weakPoints.some((w) => w.includes('1인칭'));
-  const hasEmp = weakPoints.some((w) => w.includes('감정'));
-  const hasPrev = weakPoints.some((w) => w.includes('재발'));
-
-  return [
-    `먼저 사과할게. 내가 ${hasResp ? '약속에 늦어서' : '약속을 가볍게 여긴 것 같아서'} 미안해.`,
-    `${hasEmp ? '네가 기다리면서 속상하고 서운했을 거 같아.' : '네가 어떤 마음이었는지 다시 생각해봤어.'}`,
-    `(원문 일부: "${lead}")`,
-    `${hasPrev ? '다음부터는 출발 시간을 미리 공유하고, 늦을 것 같으면 즉시 알려줄게.' : '오늘 일을 가볍게 넘기지 않을게.'}`,
-  ].join(' ');
 }
 
 const SYSTEM_PROMPT = `너는 한국어 연인 간 사과문을 평가하는 평가자다.
@@ -143,6 +162,12 @@ const SYSTEM_PROMPT = `너는 한국어 연인 간 사과문을 평가하는 평
 상대를 조종하거나 죄책감을 유도하는 표현이 있으면 noExcuse를 감점하라.
 "내가 ~해서 너에게 ~한 감정을 줬다", "다음에는 ~하겠다" 같은 표현은 가점이다.
 
+weakPoints는 사용자가 직접 다시 쓰도록 돕는 코칭형 안내여야 한다.
+- 어느 항목이 왜 약한지 구체적으로 진단하라 (가능하면 사과문 안의 실제 표현을 짚어라).
+- 사용자가 따라 쓸 수 있는 완성된 문장 예시를 절대 제공하지 마라.
+- 점검 질문이나 ‘어떤 부분을 채워보세요’ 같은 행동 지침으로 작성하라.
+- 항목별로 1개씩, 최대 6개까지.
+
 반드시 다음 JSON만 출력하라. 코드블록, 주석, 추가 텍스트 금지:
 {
   "totalScore": number,
@@ -154,8 +179,7 @@ const SYSTEM_PROMPT = `너는 한국어 연인 간 사과문을 평가하는 평
     "prevention": number
   },
   "summary": string,
-  "weakPoints": string[],
-  "improvedApology": string
+  "weakPoints": string[]
 }`;
 
 export type ScoreWithOpenAIOptions = {
@@ -267,8 +291,6 @@ function parseScoreJson(raw: string, originalText: string): ApologyScoreResult {
       weakPoints: Array.isArray(parsed?.weakPoints)
         ? parsed.weakPoints.filter((s: unknown): s is string => typeof s === 'string')
         : [],
-      improvedApology:
-        typeof parsed?.improvedApology === 'string' ? parsed.improvedApology : '',
     };
   } catch {
     return fallbackScoreApology(originalText);
