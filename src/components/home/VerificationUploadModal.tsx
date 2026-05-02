@@ -84,28 +84,44 @@ export default function VerificationUploadModal({
 
   const startWebCamera = useCallback(async () => {
     setErrorMsg('');
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      // 구형 브라우저 또는 비보안 컨텍스트(HTTP) — file input 으로 fallback
+      cameraFileRef.current?.click();
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: 'environment' } },
       });
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play().catch(() => {});
-      }
+      // <video> 엘리먼트는 phase==='camera'일 때만 렌더되므로 ref가 아직 null.
+      // 먼저 phase를 바꿔 video를 렌더하고, useEffect에서 stream을 연결한다.
       setPhase('camera');
     } catch (err) {
-      // getUserMedia 실패 시 file input 으로 fallback
       const isPermission = err instanceof DOMException && err.name === 'NotAllowedError';
       if (isPermission) {
         setErrorMsg('카메라 권한이 거부됐어요. 브라우저 설정에서 허용해 주세요.');
         setPhase('error');
       } else {
-        // 카메라를 열 수 없으면 capture="environment" file input 으로 fallback
+        // getUserMedia 실패(카메라 미존재 등) 시 file input 으로 fallback
         cameraFileRef.current?.click();
       }
     }
   }, []);
+
+  // phase==='camera'로 전환된 직후 stream을 video element에 연결
+  useEffect(() => {
+    if (phase !== 'camera') return;
+    const stream = streamRef.current;
+    if (!stream) return;
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.srcObject !== stream) v.srcObject = stream;
+    const playPromise = v.play();
+    if (playPromise && typeof playPromise.then === 'function') {
+      playPromise.catch(() => {});
+    }
+  }, [phase]);
 
   const captureWebPhoto = useCallback(() => {
     const video = videoRef.current;

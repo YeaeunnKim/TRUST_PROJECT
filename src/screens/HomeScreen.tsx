@@ -15,13 +15,16 @@ import TopBar from '@/src/components/TopBar';
 import { useAuth } from '@/src/context/auth-context';
 import { useCouple } from '@/src/context/couple-context';
 import { useDayRecords } from '@/src/context/day-records-context';
+import { usePresence } from '@/src/context/presence-context';
+import ApologyReviewModal from '@/src/components/home/ApologyReviewModal';
 import {
-  clampTrustScore,
-  getTrustScore,
-  INITIAL_TRUST_SCORE,
-  updateTrustScore,
-  addTrustEvent,
-} from '@/src/lib/trustScore';
+  getPendingApologyForReviewer,
+  getRecentReviewedForAuthor,
+  reviewApology,
+  type ApologyRow,
+} from '@/src/lib/apologies';
+import { addTrustEvent, getTrustScore, INITIAL_TRUST_SCORE } from '@/src/lib/trustScore';
+import { getSupabaseClient } from '@/src/lib/supabaseClient';
 import {
   createVerificationRequest,
   getPendingRequestForTarget,
@@ -69,6 +72,7 @@ export default function HomeScreen() {
   const { user } = useAuth();
   const { myCouple } = useCouple();
   const { records } = useDayRecords();
+  const { throwPebble } = usePresence();
 
   // partner 파생
   const partnerId = useMemo(() => {
@@ -80,12 +84,14 @@ export default function HomeScreen() {
 
   const [trustScore, setTrustScore] = useState(INITIAL_TRUST_SCORE);
 
+  // 홈 점수 = "상대가 나를 신뢰하는 정도" (partner→me 방향)
+  // 사과문이 수락되면 이 점수가 회복되고, 상대가 던진 돌에 명중되면 떨어짐
   useEffect(() => {
     if (!user || !myCouple || !partnerId) {
       setTrustScore(INITIAL_TRUST_SCORE);
       return;
     }
-    getTrustScore(myCouple.id, user.id, partnerId)
+    getTrustScore(myCouple.id, partnerId, user.id)
       .then(setTrustScore)
       .catch(() => {});
   }, [user, myCouple, partnerId]);
@@ -103,6 +109,11 @@ export default function HomeScreen() {
   // requester 용: 상대방이 보낸 사진을 수락/거절하는 모달
   const [reviewRequest, setReviewRequest] = useState<VerificationRequest | null>(null);
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
+
+  // 사과문 리뷰 모달 (내가 받은 pending 사과문)
+  const [pendingApology, setPendingApology] = useState<ApologyRow | null>(null);
+  const apologyNotifySinceRef = useRef<string>(new Date().toISOString());
+  const apologyShownIdsRef = useRef<Set<string>>(new Set());
 
   // ── Toast ────────────────────────────────────────────────────────────────
 
@@ -160,6 +171,85 @@ export default function HomeScreen() {
     const interval = setInterval(() => void checkRequests(), 10_000);
     return () => clearInterval(interval);
   }, [user, partnerId, checkRequests]);
+
+  // ── Polling: 사과문 검토 (내가 받은) + 검토 결과 알림 ─────────────────────
+
+  const refreshTrustScore = useCallback(() => {
+    if (!user || !myCouple || !partnerId) return;
+    getTrustScore(myCouple.id, partnerId, user.id)
+      .then(setTrustScore)
+      .catch(() => {});
+  }, [user, myCouple, partnerId]);
+
+  const checkApologies = useCallback(async () => {
+    if (!user || !myCouple) return;
+    try {
+      // 1) 내가 받은 pending 사과문 (없으면 모달 닫기)
+      if (!pendingApology) {
+        const result = await getPendingApologyForReviewer(user.id);
+        if (result) {
+          setPendingApology(result.row);
+        }
+      }
+
+      // 2) 내가 쓴 사과문이 검토된 결과 알림
+      const since = apologyNotifySinceRef.current;
+      const reviewed = await getRecentReviewedForAuthor(user.id, since);
+      let newestReviewedAt = since;
+      for (const r of reviewed) {
+        if (apologyShownIdsRef.current.has(r.id)) continue;
+        apologyShownIdsRef.current.add(r.id);
+        if (r.status === 'accepted') {
+          showHeroToast(`사과문이 수락됐어요. 신뢰도 +${r.trust_delta}`);
+          refreshTrustScore();
+        } else if (r.status === 'rejected') {
+          showHeroToast('사과문이 거절됐어요.');
+        }
+        if (r.reviewed_at && r.reviewed_at > newestReviewedAt) {
+          newestReviewedAt = r.reviewed_at;
+        }
+      }
+      apologyNotifySinceRef.current = newestReviewedAt;
+    } catch {
+      // 무시
+    }
+  }, [user, myCouple, pendingApology, showHeroToast, refreshTrustScore]);
+
+  useEffect(() => {
+    if (!user || !myCouple) return;
+    void checkApologies();
+    const id = setInterval(() => void checkApologies(), 10_000);
+    return () => clearInterval(id);
+  }, [user, myCouple, checkApologies]);
+
+  const handleApologyDecision = useCallback(
+    async (decision: 'accepted' | 'rejected') => {
+      if (!pendingApology) return;
+      const id = pendingApology.id;
+      setPendingApology(null);
+      try {
+        const result = await reviewApology(id, decision);
+        if (result.decision === 'accepted') {
+          // 수락은 me→partner 방향의 점수를 회복시킴.
+          // 내 홈 점수(partner→me)는 변동 없고, 상대 홈에서 점수가 오른다.
+          showHeroToast(`사과문을 수락했어요. 상대 신뢰도 +${result.appliedDelta}`);
+        } else {
+          showHeroToast('사과문을 거절했어요.');
+        }
+      } catch (e) {
+        showHeroToast(e instanceof Error ? e.message : '검토에 실패했어요.');
+      }
+    },
+    [pendingApology, showHeroToast],
+  );
+
+  const apologyAuthorName = useMemo(() => {
+    if (!pendingApology || !myCouple) return '';
+    return (
+      myCouple.members.find((m) => m.userId === pendingApology.author_id)?.username ??
+      '상대방'
+    );
+  }, [pendingApology, myCouple]);
 
   // ── Chick mood & crossfade animation ─────────────────────────────────────
 
@@ -233,23 +323,21 @@ export default function HomeScreen() {
     showHeroToast('사진을 전송했어요.');
   }, [showHeroToast]);
 
-  // ── 사진 수락 (+5) ────────────────────────────────────────────────────────
+  // ── 사진 수락 (+5, 양방향 동시 갱신) ─────────────────────────────────────
 
   const handlePhotoAccepted = useCallback(async () => {
     if (!reviewRequest || !user || !myCouple || !partnerId) return;
     try {
       await reviewVerificationRequest(reviewRequest.id, 'accepted');
-      const newScore = await updateTrustScore(myCouple.id, user.id, partnerId, 5);
-      await addTrustEvent({
-        coupleId: myCouple.id,
-        actorId: user.id,
-        targetUserId: partnerId,
-        type: 'verification_accepted',
-        delta: 5,
-        message: '사진을 수락해서 신뢰도가 올라갔어요.',
-        relatedRequestId: reviewRequest.id,
+      const supabase = getSupabaseClient();
+      const { data: newScore, error } = await supabase.rpc('apply_couple_trust_delta', {
+        p_other_user_id: partnerId,
+        p_delta: 5,
+        p_event_type: 'verification_accepted',
+        p_message: '사진을 수락해서 신뢰도가 올라갔어요.',
       });
-      setTrustScore(newScore);
+      if (error) throw error;
+      if (typeof newScore === 'number') setTrustScore(newScore);
       setReviewModalOpen(false);
       showHeroToast('사진을 수락했어요. 신뢰도가 올라갔어요.');
     } catch {
@@ -286,30 +374,33 @@ export default function HomeScreen() {
     setPebbleHighlighted(true);
   }, []);
 
-  // ── 돌멩이 실제 throw 성공 시 (-10) ──────────────────────────────────────
+  // ── 돌멩이 throw 시 throw_pebble RPC 경유 (잠자기 모드 판정) ──────────────
 
   const handlePebbleThrow = useCallback(() => {
     triggerChickReaction();
     setPebbleHighlighted(false);
-    showHeroToast('돌멩이를 던졌어요. 신뢰도가 내려갔어요.');
 
-    if (user && myCouple && partnerId) {
-      updateTrustScore(myCouple.id, user.id, partnerId, -10)
-        .then(setTrustScore)
-        .catch(() => setTrustScore((prev) => clampTrustScore(prev - 10)));
-
-      void addTrustEvent({
-        coupleId: myCouple.id,
-        actorId: user.id,
-        targetUserId: partnerId,
-        type: 'pebble_thrown',
-        delta: -10,
-        message: '돌멩이를 던져 신뢰도가 내려갔어요.',
-      });
-    } else {
-      setTrustScore((prev) => clampTrustScore(prev - 10));
+    if (!user || !myCouple || !partnerId) {
+      showHeroToast('먼저 커플을 연결해주세요.');
+      return;
     }
-  }, [triggerChickReaction, user, myCouple, partnerId, showHeroToast]);
+    void (async () => {
+      try {
+        const result = await throwPebble(partnerId);
+        if (result.outcome === 'hit') {
+          showHeroToast(`잠자는 척하고 있었어요! 신뢰도 ${result.trustChange}`);
+          // 홈 점수는 partner→me 방향이므로 내가 던진 돌은 화면 점수와 무관.
+          // 상대 화면의 점수가 떨어지는 거라 여기 setTrustScore 갱신할 필요 없음.
+        } else if (result.outcome === 'bounced') {
+          showHeroToast('자고 있어 돌이 튕겨나갔어요.');
+        } else {
+          showHeroToast('돌멩이를 던졌어요. 상대는 잠자기 모드가 아니에요.');
+        }
+      } catch (e) {
+        showHeroToast(e instanceof Error ? e.message : '돌을 던지지 못했어요.');
+      }
+    })();
+  }, [triggerChickReaction, user, myCouple, partnerId, throwPebble, showHeroToast]);
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -377,10 +468,10 @@ export default function HomeScreen() {
       )}
 
       {/* requester: 상대방 사진 수락/거절 */}
-      {reviewRequest?.imageUrl && (
+      {reviewRequest?.imagePath && (
         <VerificationReviewModal
           visible={reviewModalOpen}
-          imageUrl={reviewRequest.imageUrl}
+          imagePath={reviewRequest.imagePath}
           onAccepted={() => void handlePhotoAccepted()}
           onRejected={() => void handlePhotoRejected()}
           onClose={() => setReviewModalOpen(false)}
@@ -392,6 +483,21 @@ export default function HomeScreen() {
         onGoThrow={handleGoThrowPebble}
         onCancel={() => setPebblePromptOpen(false)}
       />
+
+      {/* 상대가 보낸 사과문 검토 */}
+      {pendingApology ? (
+        <ApologyReviewModal
+          visible
+          authorName={apologyAuthorName}
+          title={pendingApology.title}
+          body={pendingApology.body}
+          aiScore={pendingApology.ai_score}
+          trustDelta={pendingApology.trust_delta}
+          onAccept={() => void handleApologyDecision('accepted')}
+          onReject={() => void handleApologyDecision('rejected')}
+          onClose={() => setPendingApology(null)}
+        />
+      ) : null}
 
       <SettingsMenu visible={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </SafeAreaView>
