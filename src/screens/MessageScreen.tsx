@@ -1,4 +1,3 @@
-import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -15,7 +14,6 @@ const OPENAI_API_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
 const OPENAI_MODEL = process.env.EXPO_PUBLIC_OPENAI_MODEL;
 
 export default function MessageScreen() {
-  const router = useRouter();
   const todayKey = getSeoulDateKey();
   const todayLabel = formatDateLabel(todayKey);
 
@@ -108,12 +106,11 @@ export default function MessageScreen() {
         setNotice('사과문이 등록됐어요. (백엔드 미설정 — 점수 회복 미반영)');
       }
 
-      // 3. 로컬 캐시 + 폼 정리 + 기록 페이지 이동
+      // 3. 로컬 캐시 + 폼 정리 (기록은 홈 우체통에서 확인)
       await saveApology(todayKey, record);
       setTitle('');
       setDraft('');
       setAnalysis(null);
-      setTimeout(() => router.push('/(tabs)/message/history'), 1200);
     } finally {
       setSubmitting(false);
     }

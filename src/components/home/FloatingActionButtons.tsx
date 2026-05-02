@@ -1,16 +1,13 @@
-import React, { useCallback } from 'react';
+import React from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 type Props = {
   onToast: (message: string) => void;
   onSpyPress?: () => void | Promise<void>;
+  onMailboxPress?: () => void;
 };
 
-export default function FloatingActionButtons({ onToast, onSpyPress }: Props) {
-  const handleSendClick = useCallback(() => {
-    onToast('우편함 기능은 곧 추가될 예정이에요.');
-  }, [onToast]);
-
+export default function FloatingActionButtons({ onSpyPress, onMailboxPress }: Props) {
   return (
     <View style={styles.container} pointerEvents="box-none">
       <Pressable
@@ -30,9 +27,9 @@ export default function FloatingActionButtons({ onToast, onSpyPress }: Props) {
 
       <Pressable
         style={({ pressed }) => [styles.btn, pressed && styles.btnPressed]}
-        onPress={handleSendClick}
+        onPress={onMailboxPress}
         accessibilityRole="button"
-        accessibilityLabel="우체통 — 우편함 기능 (준비 중)">
+        accessibilityLabel="우체통 — 사과문 기록 보기">
         <View style={styles.circle}>
           <Image
             source={require('../../../assets/images/mailbox-icon.png')}

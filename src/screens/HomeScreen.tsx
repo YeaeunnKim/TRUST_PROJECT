@@ -4,6 +4,7 @@ import { Animated, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import BirdCharacter, { type BirdState } from '@/src/components/BirdCharacter';
 import DraggablePebble from '@/src/components/home/DraggablePebble';
 import FloatingActionButtons from '@/src/components/home/FloatingActionButtons';
+import MailboxModal from '@/src/components/home/MailboxModal';
 import PebbleRejectPrompt from '@/src/components/home/PebbleRejectPrompt';
 import TrustScoreBadge from '@/src/components/home/TrustScoreBadge';
 import VerificationReviewModal from '@/src/components/home/VerificationReviewModal';
@@ -112,6 +113,8 @@ export default function HomeScreen() {
 
   // 사과문 리뷰 모달 (내가 받은 pending 사과문)
   const [pendingApology, setPendingApology] = useState<ApologyRow | null>(null);
+  // 우체통 모달
+  const [mailboxOpen, setMailboxOpen] = useState(false);
   const apologyNotifySinceRef = useRef<string>(new Date().toISOString());
   const apologyShownIdsRef = useRef<Set<string>>(new Set());
 
@@ -443,6 +446,7 @@ export default function HomeScreen() {
             <FloatingActionButtons
               onToast={showHeroToast}
               onSpyPress={() => void handleSpyPress()}
+              onMailboxPress={() => setMailboxOpen(true)}
             />
             <DraggablePebble onThrow={handlePebbleThrow} highlighted={pebbleHighlighted} />
 
@@ -500,6 +504,8 @@ export default function HomeScreen() {
       ) : null}
 
       <SettingsMenu visible={settingsOpen} onClose={() => setSettingsOpen(false)} />
+
+      <MailboxModal visible={mailboxOpen} onClose={() => setMailboxOpen(false)} />
     </SafeAreaView>
   );
 }

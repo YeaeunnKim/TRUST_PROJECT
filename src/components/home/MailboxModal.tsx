@@ -1,8 +1,16 @@
-import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useState } from 'react';
-import { ImageBackground, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ImageBackground,
+  Modal,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
-import TopBar from '@/src/components/TopBar';
 import { useAuth } from '@/src/context/auth-context';
 import { useCouple } from '@/src/context/couple-context';
 import { listMyApologies, listPartnerApologies, type ApologyRow } from '@/src/lib/apologies';
@@ -30,8 +38,12 @@ function formatDate(iso: string): string {
   return `${month}월 ${day}일 ${hh}:${mm}`;
 }
 
-export default function ApologyHistoryScreen() {
-  const router = useRouter();
+type Props = {
+  visible: boolean;
+  onClose: () => void;
+};
+
+export default function MailboxModal({ visible, onClose }: Props) {
   const { user } = useAuth();
   const { myCouple } = useCouple();
   const [tab, setTab] = useState<Tab>('mine');
@@ -46,9 +58,7 @@ export default function ApologyHistoryScreen() {
   const myName = user?.username ?? '나';
 
   useEffect(() => {
-    if (!user) {
-      setMineRows([]);
-      setPartnerRows([]);
+    if (!visible || !user) {
       return;
     }
     let cancelled = false;
@@ -67,90 +77,94 @@ export default function ApologyHistoryScreen() {
       cancelled = true;
       clearInterval(id);
     };
-  }, [user]);
+  }, [visible, user]);
 
   const rows = tab === 'mine' ? mineRows : partnerRows;
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        <TopBar />
-        <ImageBackground
-          source={require('@/assets/images/mailbox-background.png')}
-          resizeMode="cover"
-          style={styles.backgroundPanel}
-          imageStyle={styles.backgroundImageStyle}
-        >
-          <Text style={styles.title}>사과문 기록</Text>
-          <Text style={styles.subtitle}>주고받은 사과문을 모아봤어요.</Text>
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.headerBar}>
+          <Pressable
+            style={styles.closeBtn}
+            onPress={onClose}
+            accessibilityRole="button"
+            accessibilityLabel="닫기">
+            <Ionicons name="chevron-down" size={22} color="#5d4e45" />
+          </Pressable>
+        </View>
+        <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+          <ImageBackground
+            source={require('@/assets/images/mailbox-background.png')}
+            resizeMode="cover"
+            style={styles.backgroundPanel}
+            imageStyle={styles.backgroundImageStyle}>
+            <Text style={styles.title}>사과문 기록</Text>
+            <Text style={styles.subtitle}>주고받은 사과문을 모아봤어요.</Text>
 
-          <View style={styles.tabs}>
-            <Pressable
-              style={[styles.tabBtn, tab === 'mine' && styles.tabBtnActive]}
-              onPress={() => setTab('mine')}>
-              <Text style={[styles.tabText, tab === 'mine' && styles.tabTextActive]}>
-                {myName}이 쓴
-              </Text>
-            </Pressable>
-            <Pressable
-              style={[styles.tabBtn, tab === 'partner' && styles.tabBtnActive]}
-              onPress={() => setTab('partner')}>
-              <Text style={[styles.tabText, tab === 'partner' && styles.tabTextActive]}>
-                {partnerName}이 쓴
-              </Text>
-            </Pressable>
-          </View>
-
-          {rows.length === 0 ? (
-            <View style={styles.emptyCard}>
-              <Text style={styles.emptyText}>
-                {tab === 'mine'
-                  ? '아직 작성한 사과문이 없어요.'
-                  : '상대가 보낸 사과문이 없어요.'}
-              </Text>
-              {tab === 'mine' ? (
-                <Pressable style={styles.backButton} onPress={() => router.back()}>
-                  <Text style={styles.backButtonText}>사과문 작성하러 가기</Text>
-                </Pressable>
-              ) : null}
+            <View style={styles.tabs}>
+              <Pressable
+                style={[styles.tabBtn, tab === 'mine' && styles.tabBtnActive]}
+                onPress={() => setTab('mine')}>
+                <Text style={[styles.tabText, tab === 'mine' && styles.tabTextActive]}>
+                  {myName}이 쓴
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.tabBtn, tab === 'partner' && styles.tabBtnActive]}
+                onPress={() => setTab('partner')}>
+                <Text style={[styles.tabText, tab === 'partner' && styles.tabTextActive]}>
+                  {partnerName}이 쓴
+                </Text>
+              </Pressable>
             </View>
-          ) : (
-            <View style={styles.listContainer}>
-              {rows.map((item) => {
-                const tone = STATUS_TONE[item.status];
-                return (
-                  <View key={item.id} style={styles.recordCard}>
-                    <View style={styles.pin} />
-                    <View style={styles.recordHeader}>
-                      <View style={styles.headerRow}>
-                        <Text style={styles.recordDate}>{formatDate(item.created_at)}</Text>
-                        <View style={[styles.statusPill, { backgroundColor: tone.bg }]}>
-                          <Text style={[styles.statusPillText, { color: tone.fg }]}>
-                            {STATUS_LABEL[item.status]}
-                          </Text>
+
+            {rows.length === 0 ? (
+              <View style={styles.emptyCard}>
+                <Text style={styles.emptyText}>
+                  {tab === 'mine'
+                    ? '아직 작성한 사과문이 없어요.'
+                    : '상대가 보낸 사과문이 없어요.'}
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.listContainer}>
+                {rows.map((item) => {
+                  const tone = STATUS_TONE[item.status];
+                  return (
+                    <View key={item.id} style={styles.recordCard}>
+                      <View style={styles.pin} />
+                      <View style={styles.recordHeader}>
+                        <View style={styles.headerRow}>
+                          <Text style={styles.recordDate}>{formatDate(item.created_at)}</Text>
+                          <View style={[styles.statusPill, { backgroundColor: tone.bg }]}>
+                            <Text style={[styles.statusPillText, { color: tone.fg }]}>
+                              {STATUS_LABEL[item.status]}
+                            </Text>
+                          </View>
                         </View>
+                        <Text style={styles.recordTitle}>{item.title || '(제목 없음)'}</Text>
                       </View>
-                      <Text style={styles.recordTitle}>{item.title || '(제목 없음)'}</Text>
+                      <Text style={styles.recordBody}>{item.body}</Text>
+                      <View style={styles.metaRow}>
+                        <Text style={styles.metaText}>AI 점수 {item.ai_score}</Text>
+                        <Text style={styles.metaText}>
+                          {item.status === 'accepted'
+                            ? `신뢰도 +${item.trust_delta} 회복`
+                            : item.status === 'rejected'
+                              ? '점수 회복 없음'
+                              : `수락 시 +${item.trust_delta}`}
+                        </Text>
+                      </View>
                     </View>
-                    <Text style={styles.recordBody}>{item.body}</Text>
-                    <View style={styles.metaRow}>
-                      <Text style={styles.metaText}>AI 점수 {item.ai_score}</Text>
-                      <Text style={styles.metaText}>
-                        {item.status === 'accepted'
-                          ? `신뢰도 +${item.trust_delta} 회복`
-                          : item.status === 'rejected'
-                            ? '점수 회복 없음'
-                            : `수락 시 +${item.trust_delta}`}
-                      </Text>
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
-          )}
-        </ImageBackground>
-      </ScrollView>
-    </SafeAreaView>
+                  );
+                })}
+              </View>
+            )}
+          </ImageBackground>
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
   );
 }
 
@@ -158,6 +172,20 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: '#f8f0eb',
+  },
+  headerBar: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  closeBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.6)',
   },
   container: {
     padding: 16,
@@ -225,17 +253,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#8e7f73',
     textAlign: 'center',
-    marginBottom: 16,
-  },
-  backButton: {
-    backgroundColor: '#a66f4e',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderRadius: 18,
-  },
-  backButtonText: {
-    color: '#fff',
-    fontWeight: '700',
   },
   listContainer: {
     gap: 16,
