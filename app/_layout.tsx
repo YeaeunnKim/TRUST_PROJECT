@@ -9,7 +9,6 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { AuthProvider, useAuth } from "@/src/context/auth-context";
 import { CoupleProvider } from "@/src/context/couple-context";
 import { DayRecordsProvider } from "@/src/context/day-records-context";
-import { ProfileProvider } from "@/src/context/profile-context";
 import { TimelineProvider } from "@/src/context/timeline-context";
 
 export const unstable_settings = {
@@ -46,23 +45,21 @@ export default function RootLayout() {
         <CoupleProvider>
           <DayRecordsProvider>
             <TimelineProvider>
-              <ProfileProvider>
-                <AuthGate>
-                  <Stack screenOptions={{ headerShown: false }}>
-                    <Stack.Screen name="(auth)" />
-                    <Stack.Screen name="(tabs)" />
-                    <Stack.Screen
-                      name="(modals)/learn"
-                      options={{ presentation: "transparentModal" }}
-                    />
-                    <Stack.Screen
-                      name="(modals)/learn-notepad"
-                      options={{ presentation: "transparentModal", headerShown: false }}
-                    />
-                  </Stack>
-                </AuthGate>
-                <StatusBar style="auto" />
-              </ProfileProvider>
+              <AuthGate>
+                <Stack screenOptions={{ headerShown: false }}>
+                  <Stack.Screen name="(auth)" />
+                  <Stack.Screen name="(tabs)" />
+                  <Stack.Screen
+                    name="(modals)/learn"
+                    options={{ presentation: "transparentModal" }}
+                  />
+                  <Stack.Screen
+                    name="(modals)/learn-notepad"
+                    options={{ presentation: "transparentModal", headerShown: false }}
+                  />
+                </Stack>
+              </AuthGate>
+              <StatusBar style="auto" />
             </TimelineProvider>
           </DayRecordsProvider>
         </CoupleProvider>

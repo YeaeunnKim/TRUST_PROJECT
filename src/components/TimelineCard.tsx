@@ -1,6 +1,5 @@
 ﻿import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 
 import BirdCharacter, { type BirdState } from '@/src/components/BirdCharacter';
 
@@ -15,15 +14,15 @@ export type TimelineCardItem = {
   tags: string[];
   status: TimelineStatus;
   birdState?: BirdState;
+  score?: number;
 };
 
 type TimelineCardProps = {
   item: TimelineCardItem;
   onPress: () => void;
-  onWarningPress?: () => void;
 };
 
-export default function TimelineCard({ item, onPress, onWarningPress }: TimelineCardProps) {
+export default function TimelineCard({ item, onPress }: TimelineCardProps) {
   return (
     <Pressable style={styles.card} onPress={onPress} accessibilityRole="button">
       <View style={styles.groupRow}>
@@ -52,12 +51,10 @@ export default function TimelineCard({ item, onPress, onWarningPress }: Timeline
           </View>
         </View>
 
-        <Ionicons name="chevron-forward" size={16} color="#b6a89f" />
+        {item.score !== undefined && (
+          <Text style={styles.scoreText}>{item.score}</Text>
+        )}
       </View>
-
-      <Pressable style={styles.warningBadge} onPress={onWarningPress} accessibilityRole="button">
-        <Ionicons name="alert-circle" size={16} color="#caa257" />
-      </Pressable>
     </Pressable>
   );
 }
@@ -137,15 +134,9 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#8a7a6f',
   },
-  warningBadge: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255, 236, 194, 0.9)',
+  scoreText: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#d9534f',
   },
 });

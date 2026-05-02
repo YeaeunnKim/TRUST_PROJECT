@@ -5,11 +5,11 @@ import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'rea
 import { useDayRecords } from '@/src/context/day-records-context';
 
 const FLAG_ROWS = [
-  { key: 'moneyRequest', label: '±ÝÀü °ü·Ã Ç¥Çö' },
-  { key: 'favorRequest', label: 'ºÎÅ¹/µµ¿ò ¿äÃ»' },
-  { key: 'excessivePraise', label: '°úÇÑ ÄªÂù/ÀÇÁ¸' },
-  { key: 'linkIncluded', label: '¿ÜºÎ ¸µÅ© Æ÷ÇÔ' },
-  { key: 'imageIncluded', label: 'ÀÌ¹ÌÁö Æ÷ÇÔ' },
+  { key: 'moneyRequest', label: 'ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ Ç¥ï¿½ï¿½' },
+  { key: 'favorRequest', label: 'ï¿½ï¿½Å¹/ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ã»' },
+  { key: 'excessivePraise', label: 'ï¿½ï¿½ï¿½ï¿½ Äªï¿½ï¿½/ï¿½ï¿½ï¿½ï¿½' },
+  { key: 'linkIncluded', label: 'ï¿½Üºï¿½ ï¿½ï¿½Å© ï¿½ï¿½ï¿½ï¿½' },
+  { key: 'imageIncluded', label: 'ï¿½Ì¹ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½' },
 ] as const;
 
 function formatDate(date: string) {
@@ -18,12 +18,12 @@ function formatDate(date: string) {
 
 function buildTags(flags: Record<string, boolean>) {
   const tags: string[] = [];
-  if (flags.moneyRequest) tags.push('#±ÝÀü¾ð±Þ');
-  if (flags.favorRequest) tags.push('#ºÎ´ã°¨Á¶¼º');
-  if (flags.excessivePraise) tags.push('#½Å·Ú°­Á¶');
-  if (flags.linkIncluded) tags.push('#¸µÅ©Æ÷ÇÔ');
-  if (flags.imageIncluded) tags.push('#ÀÌ¹ÌÁöÆ÷ÇÔ');
-  return tags.length > 0 ? tags : ['#ÀÏ»ó´ëÈ­'];
+  if (flags.moneyRequest) tags.push('#ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½');
+  if (flags.favorRequest) tags.push('#ï¿½Î´ã°¨ï¿½ï¿½ï¿½ï¿½');
+  if (flags.excessivePraise) tags.push('#ï¿½Å·Ú°ï¿½ï¿½ï¿½');
+  if (flags.linkIncluded) tags.push('#ï¿½ï¿½Å©ï¿½ï¿½ï¿½ï¿½');
+  if (flags.imageIncluded) tags.push('#ï¿½Ì¹ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½');
+  return tags.length > 0 ? tags : ['#ï¿½Ï»ï¿½ï¿½È­'];
 }
 
 export default function TimelineDetailScreen() {
@@ -40,7 +40,7 @@ export default function TimelineDetailScreen() {
   const nativeSentences = record?.nativeSentences ?? [];
   const translate = (sentence: string, index: number) => {
     if (nativeSentences[index]) return nativeSentences[index];
-    return '(¹ø¿ª ÁØºñÁß)';
+    return '(ï¿½ï¿½ï¿½ï¿½ ï¿½Øºï¿½ï¿½ï¿½)';
   };
 
   const tags = useMemo(() => (record ? buildTags(record.flags) : []), [record]);
@@ -48,9 +48,9 @@ export default function TimelineDetailScreen() {
   const riskLabels = useMemo(() => {
     if (!record?.immediateRisk) return [];
     return [
-      record.immediateRisk.scamUrl ? '½Å°íµÈ ¸µÅ©' : null,
-      record.immediateRisk.reportedAccount ? '½Å°íµÈ °èÁÂ' : null,
-      record.immediateRisk.aiImage ? 'ÇÕ¼º ÀÌ¹ÌÁö' : null,
+      record.immediateRisk.scamUrl ? 'ï¿½Å°ï¿½ï¿½ï¿½ ï¿½ï¿½Å©' : null,
+      record.immediateRisk.reportedAccount ? 'ï¿½Å°ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½' : null,
+      record.immediateRisk.aiImage ? 'ï¿½Õ¼ï¿½ ï¿½Ì¹ï¿½ï¿½ï¿½' : null,
     ].filter(Boolean) as string[];
   }, [record]);
 
@@ -79,16 +79,16 @@ export default function TimelineDetailScreen() {
       await markImmediateRiskShown(record.date);
     }
     setShowOverlay(false);
-    router.push('/(tabs)/profile/report');
+    router.push('/(tabs)');
   };
 
   if (!record) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.emptyWrap}>
-          <Text style={styles.emptyTitle}>ÇØ´ç ³¯Â¥ÀÇ ±â·ÏÀÌ ¾ø¾î¿ä</Text>
+          <Text style={styles.emptyTitle}>ï¿½Ø´ï¿½ ï¿½ï¿½Â¥ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½</Text>
           <Pressable style={styles.homeButton} onPress={() => router.back()}>
-            <Text style={styles.homeButtonText}>µÚ·Î</Text>
+            <Text style={styles.homeButtonText}>ï¿½Ú·ï¿½</Text>
           </Pressable>
         </View>
       </SafeAreaView>
@@ -99,13 +99,13 @@ export default function TimelineDetailScreen() {
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <Pressable style={styles.backButton} onPress={() => router.back()}>
-          <Text style={styles.backText}>µÚ·Î</Text>
+          <Text style={styles.backText}>ï¿½Ú·ï¿½</Text>
         </Pressable>
 
         <Text style={styles.title}>{formatDate(record.date)}</Text>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>¿À´ÃÀÇ ¹®Àå</Text>
+          <Text style={styles.sectionTitle}>ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½</Text>
           <View style={styles.cards}>
             {record.extractedSentences.map((sentence, index) => (
               <View key={`${sentence}-${index}`} style={styles.card}>
@@ -117,7 +117,7 @@ export default function TimelineDetailScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>¿À´ÃÀÇ ÅÂ±×</Text>
+          <Text style={styles.sectionTitle}>ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Â±ï¿½</Text>
           <View style={styles.tagRow}>
             {tags.map((tag) => (
               <View key={tag} style={styles.tagChip}>
@@ -128,12 +128,12 @@ export default function TimelineDetailScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>¿À´ÃÀÇ Ã¼Å©</Text>
+          <Text style={styles.sectionTitle}>ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Ã¼Å©</Text>
           <View style={styles.flags}>
             {FLAG_ROWS.map((flag) => (
               <View key={flag.key} style={styles.flagRow}>
                 <Text style={styles.flagLabel}>{flag.label}</Text>
-                <Text style={styles.flagValue}>{record.flags[flag.key] ? 'ÀÖÀ½' : '¾øÀ½'}</Text>
+                <Text style={styles.flagValue}>{record.flags[flag.key] ? 'ï¿½ï¿½ï¿½ï¿½' : 'ï¿½ï¿½ï¿½ï¿½'}</Text>
               </View>
             ))}
           </View>
@@ -141,29 +141,23 @@ export default function TimelineDetailScreen() {
 
         {record.immediateRisk && riskLabels.length > 0 ? (
           <View style={styles.riskBox}>
-            <Text style={styles.riskTitle}>ÀÌ¹Ì ½Å°íµÈ Á¤º¸</Text>
+            <Text style={styles.riskTitle}>ï¿½Ì¹ï¿½ ï¿½Å°ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½</Text>
             {riskLabels.map((label) => (
               <Text key={label} style={styles.riskItem}>
                 {label}
               </Text>
             ))}
-            <Pressable style={styles.riskButton} onPress={() => router.push('/(tabs)/profile/report')}>
-              <Text style={styles.riskButtonText}>Report·Î ÀÌµ¿</Text>
+            <Pressable style={styles.riskButton} onPress={() => router.push('/(tabs)')}>
+              <Text style={styles.riskButtonText}>Reportï¿½ï¿½ ï¿½Ìµï¿½</Text>
             </Pressable>
           </View>
         ) : null}
       </ScrollView>
 
-      <View style={styles.footer}>
-        <Pressable style={styles.ctaButton} onPress={() => router.push('/(tabs)/profile')}>
-          <Text style={styles.ctaText}>µµ¿òÀÌ ÇÊ¿äÇÒ±î¿ä?</Text>
-        </Pressable>
-      </View>
-
       {showOverlay ? (
         <View style={styles.overlay}>
           <View style={styles.overlayCard}>
-            <Text style={styles.overlayTitle}>ÀÌ¹Ì ½Å°íµÈ »ç±â Á¤º¸ÀÔ´Ï´Ù.</Text>
+            <Text style={styles.overlayTitle}>ï¿½Ì¹ï¿½ ï¿½Å°ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ô´Ï´ï¿½.</Text>
             <View style={styles.overlayList}>
               {riskLabels.map((label) => (
                 <Text key={label} style={styles.overlayItem}>
@@ -173,10 +167,10 @@ export default function TimelineDetailScreen() {
             </View>
             <View style={styles.overlayActions}>
               <Pressable style={styles.overlayButtonGhost} onPress={() => void handleDismiss()}>
-                <Text style={styles.overlayGhostText}>´Ý±â</Text>
+                <Text style={styles.overlayGhostText}>ï¿½Ý±ï¿½</Text>
               </Pressable>
               <Pressable style={styles.overlayButton} onPress={() => void handleReport()}>
-                <Text style={styles.overlayButtonText}>Report·Î ÀÌµ¿</Text>
+                <Text style={styles.overlayButtonText}>Reportï¿½ï¿½ ï¿½Ìµï¿½</Text>
               </Pressable>
             </View>
           </View>
