@@ -18,6 +18,7 @@ const MAPPING = {
   'clock.fill': 'timeline',
   'message.fill': 'chat',
   'person.fill': 'person',
+  'heart.fill': 'favorite',
   'paperplane.fill': 'send',
   'chevron.left.forwardslash.chevron.right': 'code',
   'chevron.right': 'chevron-right',
