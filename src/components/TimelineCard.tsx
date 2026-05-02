@@ -19,12 +19,12 @@ export type TimelineCardItem = {
 
 type TimelineCardProps = {
   item: TimelineCardItem;
-  onPress: () => void;
+  onPress?: () => void;
 };
 
 export default function TimelineCard({ item, onPress }: TimelineCardProps) {
-  return (
-    <Pressable style={styles.card} onPress={onPress} accessibilityRole="button">
+  const content = (
+    <>
       <View style={styles.groupRow}>
         <Text style={styles.groupLabel}>{item.groupLabel}</Text>
         <Text style={styles.dateLabel}>{item.dateLabel}</Text>
@@ -55,7 +55,15 @@ export default function TimelineCard({ item, onPress }: TimelineCardProps) {
           <Text style={styles.scoreText}>{item.score}</Text>
         )}
       </View>
+    </>
+  );
+
+  return onPress ? (
+    <Pressable style={styles.card} onPress={onPress} accessibilityRole="button">
+      {content}
     </Pressable>
+  ) : (
+    <View style={styles.card}>{content}</View>
   );
 }
 

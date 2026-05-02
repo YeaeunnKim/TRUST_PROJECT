@@ -20,7 +20,6 @@ import TopBar from '@/src/components/TopBar';
 
 // ─── 타입 ─────────────────────────────────────────────────
 type ActivityFilter = 'all' | 'stone' | 'spy' | 'apology';
-type SelectedBird = null | 'mine' | 'opponent';
 
 type SpyAction =
   | 'my_confirmed'    // 내가 받은 사진 확인
@@ -61,69 +60,28 @@ const MOCK_ACTIVITIES: ActivityRecord[] = [
   { id: 'a8', type: 'apology', date: '2026-04-27 09:30', dateLabel: '4월 27일 09:30', groupLabel: 'Day 5', apologyFrom: 'me', apologyContent: '늦게 답장해서 미안해.' },
 ];
 
-// ─── 로그 분리 ────────────────────────────────────────────
-// 상대방 병아리: 돌 던지기 결과 + 상대방 spy 행동
-function getOpponentLogs(records: ActivityRecord[]): LogEntry[] {
-  return records.flatMap<LogEntry>((r) => {
-    if (r.type === 'stone') return [{
-      id: r.id, time: r.dateLabel, type: 'stone',
-      description: r.isUsing ? '폰을 사용 중이었어요' : '폰을 사용하지 않았어요',
-      score: r.score,
-    }];
-    if (r.type === 'spy' && r.spyAction === 'opp_sent') return [{
-      id: r.id, time: r.dateLabel, type: 'spy',
-      description: '사진을 전송했어요',
-    }];
-    if (r.type === 'spy' && r.spyAction === 'opp_rejected') return [{
-      id: r.id, time: r.dateLabel, type: 'spy',
-      description: '사진 요청을 거절했어요',
-      score: r.score,
-    }];
-    if (r.type === 'apology' && r.apologyFrom === 'opponent') return [{
-      id: r.id, time: r.dateLabel, type: 'apology',
-      description: `사과문을 보냈어요 — "${r.apologyContent}"`,
-    }];
-    return [];
-  });
-}
-
-// 내 병아리: 내가 받은 사진에 대해 확인/거절한 행동만
-function getMyLogs(records: ActivityRecord[]): LogEntry[] {
-  return records.flatMap<LogEntry>((r) => {
-    if (r.type === 'spy' && r.spyAction === 'my_confirmed') return [{
-      id: r.id, time: r.dateLabel, type: 'spy',
-      description: '전송된 사진을 확인했어요',
-    }];
-    if (r.type === 'spy' && r.spyAction === 'my_rejected') return [{
-      id: r.id, time: r.dateLabel, type: 'spy',
-      description: '전송된 사진을 거절했어요',
-      score: r.score,
-    }];
-    if (r.type === 'apology' && r.apologyFrom === 'me') return [{
-      id: r.id, time: r.dateLabel, type: 'apology',
-      description: `사과문을 전송했어요 — "${r.apologyContent}"`,
-    }];
-    return [];
-  });
+// ─── 타임라인 이벤트 추출 ───────────────────────────────────────────
+function getTimelineActivities(records: ActivityRecord[]): ActivityRecord[] {
+  return records.filter((r) => r.type === 'stone' || r.type === 'spy' || r.type === 'apology');
 }
 
 // ─── 메인 타임라인 카드 변환 ─────────────────────────────
 const SPY_LABELS: Record<SpyAction, string> = {
-  my_confirmed:  '전송된 사진을 확인했어요',
-  my_rejected:   '전송된 사진을 거절했어요',
-  opp_sent:      '상대방이 사진을 전송했어요',
-  opp_rejected:  '상대방이 요청을 거절했어요',
+  my_confirmed:  '전송한 사진을 수락했다.',
+  my_rejected:   '거절했다.',
+  opp_sent:      '상대방이 사진을 전송했어요.',
+  opp_rejected:  '상대방이 사진 전송을 거절했어요.',
 };
 const SPY_TAGS: Record<SpyAction, string> = {
-  my_confirmed: '#사진확인', my_rejected: '#사진거절',
-  opp_sent: '#사진전송', opp_rejected: '#요청거절',
+  my_confirmed: '#사진수락', my_rejected: '#사진거절',
+  opp_sent: '#사진전송', opp_rejected: '#사진거절',
 };
 
 function toCardItem(r: ActivityRecord): TimelineCardItem {
   if (r.type === 'stone') return {
     id: r.id, groupLabel: r.groupLabel, dateLabel: r.dateLabel,
-    title: r.isUsing ? '상대방이 폰을 사용 중이었어요' : '상대방이 폰을 사용하지 않았어요',
-    subtitle: '돌 던지기로 확인한 결과예요.',
+    title: r.isUsing ? '상대방이 휴대폰을 사용중이에요' : '상대방이 사용중이 아니에요',
+    subtitle: '돌던지기를 통해 확인한 사실이에요.',
     tags: ['#돌던지기', r.isUsing ? '#사용중' : '#미사용'],
     status: 'learned', birdState: 'healthy', score: r.score,
   };
@@ -186,7 +144,6 @@ const OFFSET_T = (BIRD_H / 2) * (BIRD_SCALE - 1);
 // ─── 메인 화면 ────────────────────────────────────────────
 export default function TimelineScreen() {
   const [filter, setFilter] = useState<ActivityFilter>('all');
-  const [selectedBird, setSelectedBird] = useState<SelectedBird>(null);
   const heartScale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -199,12 +156,6 @@ export default function TimelineScreen() {
     ).start();
   }, [heartScale]);
 
-  // 병아리 클릭: 같은 병아리 재클릭 시 메인 타임라인으로 복귀
-  const handleBirdPress = (bird: 'mine' | 'opponent') => {
-    setSelectedBird((prev) => (prev === bird ? null : bird));
-    setFilter('all');
-  };
-
   const sorted = useMemo(
     () => [...MOCK_ACTIVITIES].sort((a, b) => b.date.localeCompare(a.date)),
     []
@@ -212,19 +163,10 @@ export default function TimelineScreen() {
 
   // 메인 타임라인 카드
   const cardItems = useMemo(() => {
-    const base = filter === 'all' ? sorted : sorted.filter((r) => r.type === filter);
+    const timelineActivities = getTimelineActivities(sorted);
+    const base = filter === 'all' ? timelineActivities : timelineActivities.filter((r) => r.type === filter);
     return base.map(toCardItem);
   }, [filter, sorted]);
-
-  // 병아리 로그
-  const opponentLogs = useMemo(() => getOpponentLogs(sorted), [sorted]);
-  const myLogs = useMemo(() => getMyLogs(sorted), [sorted]);
-
-  const activeLogs = useMemo(() => {
-    const base = selectedBird === 'mine' ? myLogs : opponentLogs;
-    if (filter === 'all') return base;
-    return base.filter((e) => e.type === filter);
-  }, [selectedBird, myLogs, opponentLogs, filter]);
 
   const NestHeader = (
     <View style={styles.nestCard}>
@@ -241,39 +183,26 @@ export default function TimelineScreen() {
         </View>
 
         <View style={styles.birdsRow}>
-          {/* 내 병아리 */}
-          <Pressable
-            style={styles.birdSlot}
-            onPress={() => handleBirdPress('mine')}
-            accessibilityRole="button"
-          >
-            {selectedBird === 'mine' && <View style={styles.birdSelectedRing} />}
+          <View style={styles.birdSlot}>
             <View style={styles.birdClip}>
-              <View style={[styles.birdInner, { left: OFFSET_L, top: OFFSET_T }]}>
+              <View style={[styles.birdInner, { left: OFFSET_L, top: OFFSET_T }]}> 
                 <BirdCharacter state="healthy" />
               </View>
             </View>
-            <Text style={[styles.birdLabel, selectedBird === 'mine' && styles.birdLabelActive]}>
+            <Text style={styles.birdLabel}>
               내 병아리
             </Text>
-          </Pressable>
-
-          {/* 상대방 병아리 */}
-          <Pressable
-            style={styles.birdSlot}
-            onPress={() => handleBirdPress('opponent')}
-            accessibilityRole="button"
-          >
-            {selectedBird === 'opponent' && <View style={styles.birdSelectedRing} />}
+          </View>
+          <View style={styles.birdSlot}>
             <View style={styles.birdClip}>
-              <View style={[styles.birdInner, { left: OFFSET_L, top: OFFSET_T }]}>
+              <View style={[styles.birdInner, { left: OFFSET_L, top: OFFSET_T }]}> 
                 <BirdCharacter state="uneasy" />
               </View>
             </View>
-            <Text style={[styles.birdLabel, selectedBird === 'opponent' && styles.birdLabelActive]}>
+            <Text style={styles.birdLabel}>
               상대방 병아리
             </Text>
-          </Pressable>
+          </View>
         </View>
       </View>
     </View>
@@ -283,14 +212,14 @@ export default function TimelineScreen() {
     <SafeAreaView style={styles.safeArea}>
       <TopBar />
       <FlatList
-        keyExtractor={(item) => (selectedBird ? (item as LogEntry).id : (item as TimelineCardItem).id)}
-        data={(selectedBird ? activeLogs : cardItems) as (LogEntry | TimelineCardItem)[]}
+        keyExtractor={(item) => (item as TimelineCardItem).id}
+        data={cardItems}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
           <View style={styles.headerWrap}>
             {NestHeader}
-            {/* 필터 칩 */}
+            <Text style={styles.sectionTitle}>내 행동 기록</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
               {FILTER_KEYS.map((key) => (
                 <Pressable
@@ -308,12 +237,10 @@ export default function TimelineScreen() {
           </View>
         }
         ListEmptyComponent={<Text style={styles.emptyText}>아직 기록이 없어요</Text>}
-        renderItem={({ item }) =>
-          selectedBird
-            ? <LogRow entry={item as LogEntry} />
-            : <TimelineCard item={item as TimelineCardItem} onPress={() => {}} />
-        }
-        ItemSeparatorComponent={() => selectedBird ? null : <View style={styles.separator} />}
+        renderItem={({ item }) => (
+          <TimelineCard item={item as TimelineCardItem} />
+        )}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
       />
     </SafeAreaView>
   );
@@ -330,7 +257,7 @@ const styles = StyleSheet.create({
   nestGraphic: { position: 'absolute', bottom: 0, left: 0, right: 0, overflow: 'hidden', alignItems: 'center' },
   nestScaleX: { transform: [{ scaleX: 1.25 }] },
 
-  birdsRow: { position: 'absolute', bottom: 40, left: 0, right: 0, flexDirection: 'row', justifyContent: 'space-evenly', alignItems: 'flex-end' },
+  birdsRow: { position: 'absolute', bottom: 40, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-end' },
   birdSlot: { alignItems: 'center', gap: 4 },
   birdSelectedRing: {
     position: 'absolute', top: -6, left: -6, right: -6, bottom: 20,
@@ -339,7 +266,7 @@ const styles = StyleSheet.create({
   birdClip: { width: SCALED_W, height: SCALED_H, overflow: 'hidden' },
   birdInner: { position: 'absolute', width: BIRD_W, height: BIRD_H, transform: [{ scale: BIRD_SCALE }] },
   birdLabel: { fontSize: 13, fontWeight: '600', color: '#5d4e45' },
-  birdLabelActive: { color: '#e05040' },
+  birdLabelActive: { fontSize: 13, fontWeight: '700', color: '#e05040' },
 
   heartWrap: { position: 'absolute', top: 6, left: 0, right: 0, alignItems: 'center', zIndex: 3 },
   heartContainer: { width: 150, height: 82, alignItems: 'center', justifyContent: 'center' },
@@ -351,6 +278,7 @@ const styles = StyleSheet.create({
   chipText: { fontSize: 12, color: '#7b6c62' },
   chipTextActive: { fontWeight: '600', color: '#5d4e45' },
 
+  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#5d4e45', marginTop: 12, marginBottom: 8 },
   separator: { height: 12 },
   emptyText: { fontSize: 13, color: '#b8a89e', textAlign: 'center', paddingVertical: 24 },
 });
