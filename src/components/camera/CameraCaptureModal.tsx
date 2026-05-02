@@ -160,9 +160,9 @@ export default function CameraCaptureModal({ visible, requestId, onClose, onUplo
     setPhase('uploading');
     setUploadError('');
     try {
-      const { imageUrl } = await uploadVerificationPhoto(requestId, capturedBlob);
+      const { imagePath } = await uploadVerificationPhoto(requestId, capturedBlob);
       setPhase('done');
-      onUploaded(imageUrl);
+      onUploaded(imagePath);
     } catch {
       setUploadError('업로드에 실패했어요. 다시 시도해 주세요.');
       setPhase('preview');
