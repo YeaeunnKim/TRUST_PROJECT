@@ -1,3 +1,4 @@
+import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -62,12 +63,12 @@ function assessApology(apology: string) {
 }
 
 export default function MessageScreen() {
+  const router = useRouter();
   const todayKey = getSeoulDateKey();
   const todayLabel = formatDateLabel(todayKey);
 
   const [title, setTitle] = useState('');
   const [draft, setDraft] = useState('');
-  const [savedApology, setSavedApology] = useState<{ title: string; body: string } | null>(null);
   const [analysis, setAnalysis] = useState<ReturnType<typeof assessApology> | null>(null);
   const [notice, setNotice] = useState<string>('');
 
@@ -77,7 +78,6 @@ export default function MessageScreen() {
       if (loaded) {
         setTitle(loaded.title);
         setDraft(loaded.body);
-        setSavedApology(loaded);
       }
     }
     load();
@@ -87,8 +87,6 @@ export default function MessageScreen() {
 
   const scoreLabel = analysis ? `${analysis.score} / 100` : '아직 평가되지 않음';
 
-  const savedLabel = savedApology ? '오늘 등록된 사과문이 있습니다.' : '아직 등록된 사과문이 없습니다.';
-
   const handleEvaluate = () => {
     setAnalysis(assessApology(draft));
     setNotice('AI가 사과문을 점검했습니다. 아래 제안을 확인해 보세요.');
@@ -97,8 +95,8 @@ export default function MessageScreen() {
   const handleRegister = async () => {
     const record = { title: title.trim(), body: draft.trim() };
     await saveApology(todayKey, record);
-    setSavedApology(record);
-    setNotice('사과문이 등록되었습니다. 필요하면 다시 수정하고 다시 등록하세요.');
+    setNotice('사과문이 등록되었습니다. 사과문 기록 페이지로 이동합니다.');
+    router.push('/(tabs)/message/history');
   };
 
   const evaluationCard = useMemo(() => {
@@ -155,13 +153,6 @@ export default function MessageScreen() {
         {notice ? <Text style={styles.noticeText}>{notice}</Text> : null}
         {evaluationCard}
 
-        {savedApology ? (
-          <View style={styles.savedCard}>
-            <Text style={styles.savedTitle}>등록된 사과문</Text>
-            <Text style={styles.savedSubtitle}>{savedApology.title}</Text>
-            <Text style={styles.savedText}>{savedApology.body}</Text>
-          </View>
-        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
