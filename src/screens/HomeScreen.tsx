@@ -19,6 +19,7 @@ import DraggablePebble from '@/src/components/home/DraggablePebble';
 import FloatingActionButtons from '@/src/components/home/FloatingActionButtons';
 import Nest from '@/src/components/Nest';
 import SettingsMenu from '@/src/components/SettingsMenu';
+import SleepModeToggle from '@/src/components/home/SleepModeToggle';
 import TopBar from '@/src/components/TopBar';
 import { useDayRecords } from '@/src/context/day-records-context';
 import type { BirdState as ModelBirdState } from '@/src/models/bird-state';
@@ -421,6 +422,10 @@ export default function HomeScreen() {
         <View style={styles.roomLayer}>
           <TopBar style={styles.topBarAdjust} onPressSettings={() => setSettingsOpen(true)} />
 
+          <View style={styles.sleepToggleRow}>
+            <SleepModeToggle />
+          </View>
+
           <Pressable
             style={styles.heroArea}
             ref={heroRef}
@@ -598,6 +603,11 @@ const styles = StyleSheet.create({
   topBarAdjust: {
     marginHorizontal: -14,
     marginTop: -14,
+  },
+  sleepToggleRow: {
+    marginTop: 6,
+    marginBottom: 4,
+    paddingHorizontal: 4,
   },
   iconButton: {
     width: 34,

@@ -9,6 +9,7 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { AuthProvider, useAuth } from "@/src/context/auth-context";
 import { CoupleProvider } from "@/src/context/couple-context";
 import { DayRecordsProvider } from "@/src/context/day-records-context";
+import { PresenceProvider } from "@/src/context/presence-context";
 import { TimelineProvider } from "@/src/context/timeline-context";
 
 export const unstable_settings = {
@@ -43,6 +44,7 @@ export default function RootLayout() {
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
       <AuthProvider>
         <CoupleProvider>
+          <PresenceProvider>
           <DayRecordsProvider>
             <TimelineProvider>
               <AuthGate>
@@ -62,6 +64,7 @@ export default function RootLayout() {
               <StatusBar style="auto" />
             </TimelineProvider>
           </DayRecordsProvider>
+          </PresenceProvider>
         </CoupleProvider>
       </AuthProvider>
     </ThemeProvider>
