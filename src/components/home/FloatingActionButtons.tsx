@@ -1,6 +1,5 @@
-import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import CameraCaptureModal from '@/src/components/camera/CameraCaptureModal';
 import { createVerificationRequest } from '@/src/lib/verificationRequests';
@@ -40,7 +39,7 @@ export default function FloatingActionButtons({ onToast }: Props) {
           accessibilityRole="button"
           accessibilityLabel="염탐하기 — 상대방에게 사진 인증 요청 보내기">
           <View style={styles.circle}>
-            <Ionicons name="eye-outline" size={22} color="#5d4e45" />
+            <Image source={require('../../../assets/images/spy-icon.png')} style={styles.icon} resizeMode="contain" />
           </View>
           <Text style={styles.label}>염탐하기</Text>
         </Pressable>
@@ -49,11 +48,11 @@ export default function FloatingActionButtons({ onToast }: Props) {
           style={({ pressed }) => [styles.btn, pressed && styles.btnPressed]}
           onPress={handleSendClick}
           accessibilityRole="button"
-          accessibilityLabel="보내기 — 우편함 기능 (준비 중)">
+          accessibilityLabel="우체통 — 우편함 기능 (준비 중)">
           <View style={styles.circle}>
-            <Ionicons name="paper-plane-outline" size={22} color="#5d4e45" />
+            <Image source={require('../../../assets/images/mailbox-icon.png')} style={styles.icon} resizeMode="contain" />
           </View>
-          <Text style={styles.label}>보내기</Text>
+          <Text style={styles.label}>우체통</Text>
         </Pressable>
       </View>
 
@@ -104,6 +103,10 @@ const styles = StyleSheet.create({
     elevation: 4,
     borderWidth: 1,
     borderColor: 'rgba(189, 159, 145, 0.35)',
+  },
+  icon: {
+    width: 24,
+    height: 24,
   },
   label: {
     fontSize: 11,
