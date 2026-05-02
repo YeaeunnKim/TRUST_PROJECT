@@ -8,11 +8,16 @@ export interface VerificationRequest {
   requesterId: string;
   targetUserId: string;
   status: VerificationStatus;
+  /** 표시용 signed URL — 런타임에만 생성, DB에는 저장하지 않음 */
   imageUrl?: string;
+  /** Storage 경로 — DB의 image_url 컬럼에 저장 */
+  imagePath?: string;
   createdAt: string;
   uploadedAt?: string;
   reviewedAt?: string;
 }
+
+const BUCKET = 'verification-photos';
 
 function rowToRequest(row: Record<string, unknown>): VerificationRequest {
   return {
@@ -21,13 +26,30 @@ function rowToRequest(row: Record<string, unknown>): VerificationRequest {
     requesterId: row.requester_id as string,
     targetUserId: row.target_user_id as string,
     status: row.status as VerificationStatus,
-    imageUrl: (row.image_url as string | null) ?? undefined,
+    // DB image_url 컬럼에는 Storage path 가 저장됨
+    imagePath: (row.image_url as string | null) ?? undefined,
     createdAt: row.created_at as string,
     uploadedAt: (row.uploaded_at as string | null) ?? undefined,
     reviewedAt: (row.reviewed_at as string | null) ?? undefined,
   };
 }
 
+/** Storage path → 1시간짜리 signed URL. 실패 시 undefined. */
+async function toSignedUrl(path: string): Promise<string | undefined> {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase.storage
+    .from(BUCKET)
+    .createSignedUrl(path, 60 * 60);
+  if (error || !data?.signedUrl) return undefined;
+  return data.signedUrl;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * A가 B에게 사진 인증 요청을 생성한다.
+ * pending 또는 uploaded 상태의 진행 중 요청이 있으면 중복 생성하지 않는다.
+ */
 export async function createVerificationRequest(
   coupleId: string,
   requesterId: string,
@@ -50,14 +72,19 @@ export async function createVerificationRequest(
     .select('id')
     .eq('couple_id', coupleId)
     .eq('requester_id', requesterId)
-    .eq('status', 'pending')
+    .in('status', ['pending', 'uploaded'])
     .maybeSingle();
 
-  if (existing) throw new Error('이미 대기 중인 사진 요청이 있어요.');
+  if (existing) throw new Error('이미 진행 중인 사진 요청이 있어요.');
 
   const { data, error } = await supabase
     .from('verification_requests')
-    .insert({ couple_id: coupleId, requester_id: requesterId, target_user_id: targetUserId })
+    .insert({
+      couple_id: coupleId,
+      requester_id: requesterId,
+      target_user_id: targetUserId,
+      status: 'pending',
+    })
     .select()
     .single();
 
@@ -84,7 +111,10 @@ export async function getPendingRequestForTarget(
   return data ? rowToRequest(data as Record<string, unknown>) : null;
 }
 
-/** requester가 보낸 요청 중 uploaded 상태인 가장 최신 1건 */
+/**
+ * requester가 보낸 uploaded 요청 중 가장 최신 1건.
+ * imagePath → fresh signed URL(1h)을 생성해 imageUrl 에 담아 반환한다.
+ */
 export async function getUploadedRequestForRequester(
   requesterId: string,
 ): Promise<VerificationRequest | null> {
@@ -100,56 +130,59 @@ export async function getUploadedRequestForRequester(
     .limit(1)
     .maybeSingle();
 
-  return data ? rowToRequest(data as Record<string, unknown>) : null;
+  if (!data) return null;
+
+  const req = rowToRequest(data as Record<string, unknown>);
+
+  if (req.imagePath) {
+    req.imageUrl = await toSignedUrl(req.imagePath);
+  }
+
+  return req;
 }
 
 /**
- * target 사용자가 사진을 업로드하고 상태를 'uploaded'로 변경한다.
- * Storage bucket 이름: verification-photos (Supabase 대시보드에서 사전 생성 필요)
+ * B(target)가 사진을 찍어 Storage에 업로드하고 요청 상태를 'uploaded'로 변경한다.
+ * DB의 image_url 컬럼에는 signed URL 대신 Storage path 를 저장한다.
  */
 export async function uploadVerificationPhoto(
   requestId: string,
   imageBlob: Blob,
-): Promise<{ imageUrl: string }> {
+  fileName?: string,
+): Promise<{ imagePath: string }> {
   if (!isSupabaseConfigured()) {
     await new Promise((resolve) => setTimeout(resolve, 800));
-    const mockUrl = `https://example.com/mock/${requestId}.jpg`;
-    return { imageUrl: mockUrl };
+    return { imagePath: `mock/${requestId}.jpg` };
   }
   const supabase = getSupabaseClient();
 
-  const storagePath = `${requestId}/${Date.now()}.jpg`;
+  const ext = fileName ? (fileName.split('.').pop() ?? 'jpg') : 'jpg';
+  const storagePath = `verification-requests/${requestId}/${Date.now()}.${ext}`;
 
   const { error: storageError } = await supabase.storage
-    .from('verification-photos')
-    .upload(storagePath, imageBlob, { contentType: 'image/jpeg', upsert: false });
+    .from(BUCKET)
+    .upload(storagePath, imageBlob, {
+      contentType: imageBlob.type || 'image/jpeg',
+      upsert: false,
+    });
 
   if (storageError) throw new Error('사진 업로드에 실패했어요. 다시 시도해주세요.');
-
-  // 7일짜리 서명 URL 생성 (bucket 이 public 이 아닌 경우 대비)
-  const { data: signedData, error: signedError } = await supabase.storage
-    .from('verification-photos')
-    .createSignedUrl(storagePath, 7 * 24 * 60 * 60);
-
-  if (signedError || !signedData?.signedUrl) throw new Error('사진 URL 생성에 실패했어요.');
-
-  const imageUrl = signedData.signedUrl;
 
   const { error: dbError } = await supabase
     .from('verification_requests')
     .update({
       status: 'uploaded',
-      image_url: imageUrl,
+      image_url: storagePath,       // path 저장
       uploaded_at: new Date().toISOString(),
     })
     .eq('id', requestId);
 
   if (dbError) throw new Error(dbError.message);
 
-  return { imageUrl };
+  return { imagePath: storagePath };
 }
 
-/** requester 가 사진을 수락 또는 거절한다. */
+/** requester가 사진을 수락 또는 거절한다. */
 export async function reviewVerificationRequest(
   requestId: string,
   decision: 'accepted' | 'rejected',

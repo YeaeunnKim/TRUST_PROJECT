@@ -3,6 +3,7 @@ import * as ImagePicker from 'expo-image-picker';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   Modal,
   Platform,
   Pressable,
@@ -31,12 +32,17 @@ export default function VerificationUploadModal({
   const [phase, setPhase] = useState<Phase>('prompt');
   const [capturedUri, setCapturedUri] = useState<string | null>(null);
   const [capturedBlob, setCapturedBlob] = useState<Blob | null>(null);
+  const [capturedFileName, setCapturedFileName] = useState<string | undefined>(undefined);
   const [errorMsg, setErrorMsg] = useState('');
   const [uploadError, setUploadError] = useState('');
 
+  // Web: live camera refs
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  // Web: hidden file inputs (camera / gallery)
+  const cameraFileRef = useRef<HTMLInputElement | null>(null);
+  const galleryFileRef = useRef<HTMLInputElement | null>(null);
 
   const stopStream = useCallback(() => {
     if (streamRef.current) {
@@ -51,10 +57,30 @@ export default function VerificationUploadModal({
       setPhase('prompt');
       setCapturedUri(null);
       setCapturedBlob(null);
+      setCapturedFileName(undefined);
       setErrorMsg('');
       setUploadError('');
     }
   }, [visible, stopStream]);
+
+  // ── Web: file input handler (camera or gallery) ──────────────────────────
+
+  const handleWebFileSelected = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) { setPhase('prompt'); return; }
+      const uri = URL.createObjectURL(file);
+      setCapturedUri(uri);
+      setCapturedBlob(file);
+      setCapturedFileName(file.name);
+      setPhase('preview');
+      // reset input so the same file can be re-selected later
+      e.target.value = '';
+    },
+    [],
+  );
+
+  // ── Web: live camera (getUserMedia) ──────────────────────────────────────
 
   const startWebCamera = useCallback(async () => {
     setErrorMsg('');
@@ -69,12 +95,15 @@ export default function VerificationUploadModal({
       }
       setPhase('camera');
     } catch (err) {
-      const msg =
-        err instanceof DOMException && err.name === 'NotAllowedError'
-          ? '카메라 권한이 거부됐어요. 브라우저 설정에서 허용해 주세요.'
-          : '카메라를 열 수 없어요.';
-      setErrorMsg(msg);
-      setPhase('error');
+      // getUserMedia 실패 시 file input 으로 fallback
+      const isPermission = err instanceof DOMException && err.name === 'NotAllowedError';
+      if (isPermission) {
+        setErrorMsg('카메라 권한이 거부됐어요. 브라우저 설정에서 허용해 주세요.');
+        setPhase('error');
+      } else {
+        // 카메라를 열 수 없으면 capture="environment" file input 으로 fallback
+        cameraFileRef.current?.click();
+      }
     }
   }, []);
 
@@ -91,6 +120,7 @@ export default function VerificationUploadModal({
       (blob) => {
         if (!blob) return;
         setCapturedBlob(blob);
+        setCapturedFileName('photo.jpg');
         setCapturedUri(canvas.toDataURL('image/jpeg', 0.9));
         stopStream();
         setPhase('preview');
@@ -99,6 +129,8 @@ export default function VerificationUploadModal({
       0.9,
     );
   }, [stopStream]);
+
+  // ── Mobile: camera ────────────────────────────────────────────────────────
 
   const startMobileCamera = useCallback(async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -112,16 +144,14 @@ export default function VerificationUploadModal({
       quality: 0.9,
       cameraType: ImagePicker.CameraType.back,
     });
-    if (result.canceled) {
-      setPhase('prompt');
-      return;
-    }
+    if (result.canceled) { setPhase('prompt'); return; }
     const asset = result.assets[0];
     try {
       const res = await fetch(asset.uri);
       const blob = await res.blob();
       setCapturedBlob(blob);
       setCapturedUri(asset.uri);
+      setCapturedFileName(asset.fileName ?? 'photo.jpg');
       setPhase('preview');
     } catch {
       setErrorMsg('사진을 처리하는 중 오류가 발생했어요.');
@@ -129,32 +159,69 @@ export default function VerificationUploadModal({
     }
   }, []);
 
-  const handleStartCamera = useCallback(() => {
+  // ── Mobile: gallery ───────────────────────────────────────────────────────
+
+  const startMobileGallery = useCallback(async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      setErrorMsg('갤러리 접근 권한이 필요해요. 기기 설정에서 허용해 주세요.');
+      setPhase('error');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: 'images',
+      quality: 0.9,
+    });
+    if (result.canceled) { setPhase('prompt'); return; }
+    const asset = result.assets[0];
+    try {
+      const res = await fetch(asset.uri);
+      const blob = await res.blob();
+      setCapturedBlob(blob);
+      setCapturedUri(asset.uri);
+      setCapturedFileName(asset.fileName ?? 'photo.jpg');
+      setPhase('preview');
+    } catch {
+      setErrorMsg('사진을 처리하는 중 오류가 발생했어요.');
+      setPhase('error');
+    }
+  }, []);
+
+  // ── 버튼 핸들러 ───────────────────────────────────────────────────────────
+
+  const handleCameraPress = useCallback(() => {
     if (Platform.OS === 'web') startWebCamera();
     else startMobileCamera();
   }, [startWebCamera, startMobileCamera]);
 
+  const handleGalleryPress = useCallback(() => {
+    if (Platform.OS === 'web') galleryFileRef.current?.click();
+    else startMobileGallery();
+  }, [startMobileGallery]);
+
   const handleRetake = useCallback(() => {
     setCapturedUri(null);
     setCapturedBlob(null);
+    setCapturedFileName(undefined);
     setUploadError('');
-    if (Platform.OS === 'web') startWebCamera();
-    else startMobileCamera();
-  }, [startWebCamera, startMobileCamera]);
+    setPhase('prompt');
+  }, []);
 
   const handleSend = useCallback(async () => {
     if (!capturedBlob) return;
     setPhase('uploading');
     setUploadError('');
     try {
-      await uploadVerificationPhoto(requestId, capturedBlob);
+      await uploadVerificationPhoto(requestId, capturedBlob, capturedFileName);
       setPhase('done');
       onUploaded();
     } catch {
       setUploadError('사진 업로드에 실패했어요. 다시 시도해주세요.');
       setPhase('preview');
     }
-  }, [capturedBlob, requestId, onUploaded]);
+  }, [capturedBlob, capturedFileName, requestId, onUploaded]);
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onDismiss}>
@@ -166,25 +233,53 @@ export default function VerificationUploadModal({
             </Pressable>
           )}
 
+          {/* ── PROMPT ── */}
           {phase === 'prompt' && (
             <View style={styles.section}>
+              {/* 웹용 히든 file input: 카메라 (capture) */}
+              {Platform.OS === 'web' && (
+                <>
+                  <input
+                    ref={cameraFileRef as React.RefObject<HTMLInputElement>}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    style={{ display: 'none' }}
+                    onChange={handleWebFileSelected}
+                  />
+                  <input
+                    ref={galleryFileRef as React.RefObject<HTMLInputElement>}
+                    type="file"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={handleWebFileSelected}
+                  />
+                </>
+              )}
+
               <Ionicons name="eye-outline" size={40} color="#c4a882" />
               <Text style={styles.title}>사진 인증 요청이 도착했어요</Text>
               <Text style={styles.body}>
-                {'상대방이 지금 상황 확인을 요청했어요.\n동의하면 사진을 촬영해 전송해주세요.'}
+                {'상대방이 지금 상황 확인을 요청했어요.\n사진을 촬영하거나 갤러리에서 선택해 전송해주세요.'}
               </Text>
-              <Pressable
-                style={styles.primaryBtn}
-                onPress={handleStartCamera}
-                accessibilityLabel="사진 찍기">
-                <Text style={styles.primaryBtnText}>사진 찍기</Text>
+
+              <Pressable style={styles.primaryBtn} onPress={handleCameraPress} accessibilityLabel="사진 찍기">
+                <Ionicons name="camera-outline" size={18} color="#5d4e45" />
+                <Text style={[styles.primaryBtnText, { marginLeft: 6 }]}>사진 찍기</Text>
               </Pressable>
+
+              <Pressable style={styles.secondaryBtn} onPress={handleGalleryPress} accessibilityLabel="갤러리에서 가져오기">
+                <Ionicons name="images-outline" size={18} color="#5d4e45" />
+                <Text style={[styles.secondaryBtnText, { marginLeft: 6 }]}>갤러리에서 가져오기</Text>
+              </Pressable>
+
               <Pressable style={styles.ghostBtn} onPress={onDismiss} accessibilityLabel="나중에">
                 <Text style={styles.ghostBtnText}>나중에</Text>
               </Pressable>
             </View>
           )}
 
+          {/* ── WEB LIVE CAMERA ── */}
           {phase === 'camera' && Platform.OS === 'web' && (
             <View style={styles.section}>
               <video
@@ -202,12 +297,17 @@ export default function VerificationUploadModal({
                 <Ionicons name="camera" size={20} color="#5d4e45" />
                 <Text style={[styles.primaryBtnText, { marginLeft: 6 }]}>사진 찍기</Text>
               </Pressable>
+              <Pressable style={styles.ghostBtn} onPress={() => { stopStream(); setPhase('prompt'); }} accessibilityLabel="취소">
+                <Text style={styles.ghostBtnText}>취소</Text>
+              </Pressable>
             </View>
           )}
 
+          {/* ── PREVIEW ── */}
           {phase === 'preview' && capturedUri && (
             <View style={styles.section}>
               <Text style={styles.title}>사진 미리보기</Text>
+
               {Platform.OS === 'web' ? (
                 <img
                   src={capturedUri}
@@ -215,17 +315,17 @@ export default function VerificationUploadModal({
                   alt="촬영된 사진"
                 />
               ) : (
-                <View style={styles.previewPlaceholder}>
-                  <Text style={styles.previewPlaceholderText}>사진 준비됨</Text>
-                </View>
+                <Image source={{ uri: capturedUri }} style={styles.previewImgNative} resizeMode="cover" />
               )}
+
               {uploadError ? <Text style={styles.errorText}>{uploadError}</Text> : null}
+
               <View style={styles.row}>
                 <Pressable
                   style={[styles.halfBtn, styles.ghostBtn]}
                   onPress={handleRetake}
-                  accessibilityLabel="다시 찍기">
-                  <Text style={styles.ghostBtnText}>다시 찍기</Text>
+                  accessibilityLabel="다시 선택하기">
+                  <Text style={styles.ghostBtnText}>다시 선택하기</Text>
                 </Pressable>
                 <Pressable
                   style={[styles.halfBtn, styles.primaryBtn]}
@@ -237,6 +337,7 @@ export default function VerificationUploadModal({
             </View>
           )}
 
+          {/* ── UPLOADING ── */}
           {phase === 'uploading' && (
             <View style={styles.section}>
               <ActivityIndicator size="large" color="#c4a882" />
@@ -244,6 +345,7 @@ export default function VerificationUploadModal({
             </View>
           )}
 
+          {/* ── DONE ── */}
           {phase === 'done' && (
             <View style={styles.section}>
               <Ionicons name="checkmark-circle" size={48} color="#9fc7a0" />
@@ -254,13 +356,17 @@ export default function VerificationUploadModal({
             </View>
           )}
 
+          {/* ── ERROR ── */}
           {phase === 'error' && (
             <View style={styles.section}>
               <Ionicons name="alert-circle-outline" size={40} color="#d4927a" />
-              <Text style={styles.title}>카메라 오류</Text>
+              <Text style={styles.title}>오류가 발생했어요</Text>
               <Text style={styles.body}>{errorMsg}</Text>
-              <Pressable style={styles.primaryBtn} onPress={onDismiss} accessibilityLabel="닫기">
-                <Text style={styles.primaryBtnText}>닫기</Text>
+              <Pressable style={styles.primaryBtn} onPress={() => setPhase('prompt')} accessibilityLabel="다시 시도">
+                <Text style={styles.primaryBtnText}>다시 시도</Text>
+              </Pressable>
+              <Pressable style={styles.ghostBtn} onPress={onDismiss} accessibilityLabel="닫기">
+                <Text style={styles.ghostBtnText}>닫기</Text>
               </Pressable>
             </View>
           )}
@@ -316,6 +422,17 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   primaryBtnText: { fontSize: 14, fontWeight: '600', color: '#5d4e45' },
+  secondaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 46,
+    borderRadius: 18,
+    backgroundColor: 'rgba(215, 200, 190, 0.55)',
+    paddingHorizontal: 28,
+    width: '100%',
+  },
+  secondaryBtnText: { fontSize: 14, fontWeight: '500', color: '#5d4e45' },
   ghostBtn: {
     height: 46,
     borderRadius: 18,
@@ -345,14 +462,10 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     objectFit: 'cover',
   },
-  previewPlaceholder: {
+  previewImgNative: {
     width: '100%',
-    height: 180,
+    height: 240,
     borderRadius: 14,
-    backgroundColor: '#e8d5c8',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  previewPlaceholderText: { fontSize: 13, color: '#9a8a7d' },
   errorText: { fontSize: 12, color: '#9a6252', textAlign: 'center' },
 });
