@@ -89,7 +89,7 @@ export default function ApologyScoreCard({ result }: ApologyScoreCardProps) {
 
       {result.weakPoints.length > 0 ? (
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>보완하면 좋은 점</Text>
+          <Text style={styles.sectionLabel}>직접 다시 살펴볼 점</Text>
           <View>
             {result.weakPoints.map((w, i) => (
               <View key={`${i}-${w.slice(0, 8)}`} style={styles.bulletRow}>
@@ -97,15 +97,6 @@ export default function ApologyScoreCard({ result }: ApologyScoreCardProps) {
                 <Text style={styles.bulletText}>{w}</Text>
               </View>
             ))}
-          </View>
-        </View>
-      ) : null}
-
-      {result.improvedApology ? (
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>개선된 사과문 예시</Text>
-          <View style={styles.improvedBox}>
-            <Text style={styles.improvedText}>{result.improvedApology}</Text>
           </View>
         </View>
       ) : null}
@@ -199,18 +190,6 @@ const styles = StyleSheet.create({
   },
   bulletText: {
     flex: 1,
-    fontSize: 13,
-    lineHeight: 20,
-    color: '#5d4e45',
-  },
-  improvedBox: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(199, 155, 134, 0.4)',
-    backgroundColor: 'rgba(199, 155, 134, 0.12)',
-    padding: 12,
-  },
-  improvedText: {
     fontSize: 13,
     lineHeight: 20,
     color: '#5d4e45',
