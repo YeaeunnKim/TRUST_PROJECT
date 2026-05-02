@@ -13,33 +13,30 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Ionicons } from '@expo/vector-icons';
 
-import BirdCharacter from '@/src/components/BirdCharacter';
+import BirdCharacter, { type BirdState } from '@/src/components/BirdCharacter';
 import Nest from '@/src/components/Nest';
 import TimelineCard, { type TimelineCardItem } from '@/src/components/TimelineCard';
 import TopBar from '@/src/components/TopBar';
+import { useAuth } from '@/src/context/auth-context';
+import { useCouple } from '@/src/context/couple-context';
+import {
+  fetchActivityFeed,
+  type ActivityRecord,
+  type SpyAction,
+} from '@/src/lib/activityFeed';
+import { getTrustScore, INITIAL_TRUST_SCORE } from '@/src/lib/trustScore';
 
 // ─── 타입 ─────────────────────────────────────────────────
 type ActivityFilter = 'all' | 'stone' | 'spy' | 'apology';
 type SelectedBird = null | 'mine' | 'opponent';
 
-type SpyAction =
-  | 'my_confirmed'    // 내가 받은 사진 확인
-  | 'my_rejected'     // 내가 받은 사진 거절
-  | 'opp_sent'        // 상대방이 사진 전송
-  | 'opp_rejected';   // 상대방이 요청 거절
-
-type ActivityRecord = {
-  id: string;
-  type: 'stone' | 'spy' | 'apology';
-  date: string;
-  dateLabel: string;
-  groupLabel: string;
-  score?: number;
-  isUsing?: boolean;
-  spyAction?: SpyAction;
-  apologyFrom?: 'me' | 'opponent';
-  apologyContent?: string;
-};
+// 신뢰도 점수 → 병아리 상태 매핑 (홈 화면과 동일 기준)
+function scoreToBirdState(score: number): BirdState {
+  if (score >= 76) return 'healthy';
+  if (score >= 51) return 'uneasy';
+  if (score >= 26) return 'distorted';
+  return 'critical';
+}
 
 type LogEntry = {
   id: string;
@@ -49,17 +46,6 @@ type LogEntry = {
   type: ActivityRecord['type'];
 };
 
-// ─── 목업 데이터 ──────────────────────────────────────────
-const MOCK_ACTIVITIES: ActivityRecord[] = [
-  { id: 'a1', type: 'stone',   date: '2026-05-02 14:32', dateLabel: '5월 2일 14:32',  groupLabel: '오늘',  isUsing: true, score: -5 },
-  { id: 'a2', type: 'spy',     date: '2026-05-02 13:20', dateLabel: '5월 2일 13:20',  groupLabel: '오늘',  spyAction: 'my_confirmed' },
-  { id: 'a3', type: 'stone',   date: '2026-05-01 20:15', dateLabel: '5월 1일 20:15',  groupLabel: 'Day 1', isUsing: false },
-  { id: 'a4', type: 'spy',     date: '2026-04-30 11:00', dateLabel: '4월 30일 11:00', groupLabel: 'Day 2', spyAction: 'my_rejected', score: -5 },
-  { id: 'a5', type: 'spy',     date: '2026-04-29 18:00', dateLabel: '4월 29일 18:00', groupLabel: 'Day 3', spyAction: 'opp_sent' },
-  { id: 'a6', type: 'spy',     date: '2026-04-28 15:00', dateLabel: '4월 28일 15:00', groupLabel: 'Day 4', spyAction: 'opp_rejected', score: -5 },
-  { id: 'a7', type: 'apology', date: '2026-04-28 10:00', dateLabel: '4월 28일 10:00', groupLabel: 'Day 4', apologyFrom: 'opponent', apologyContent: '어제 연락 못 해서 미안해.' },
-  { id: 'a8', type: 'apology', date: '2026-04-27 09:30', dateLabel: '4월 27일 09:30', groupLabel: 'Day 5', apologyFrom: 'me', apologyContent: '늦게 답장해서 미안해.' },
-];
 
 // ─── 로그 분리 ────────────────────────────────────────────
 // 상대방 병아리: 돌 던지기 결과 + 상대방 spy 행동
@@ -185,9 +171,27 @@ const OFFSET_T = (BIRD_H / 2) * (BIRD_SCALE - 1);
 
 // ─── 메인 화면 ────────────────────────────────────────────
 export default function TimelineScreen() {
+  const { user } = useAuth();
+  const { myCouple } = useCouple();
   const [filter, setFilter] = useState<ActivityFilter>('all');
   const [selectedBird, setSelectedBird] = useState<SelectedBird>(null);
+  const [activities, setActivities] = useState<ActivityRecord[]>([]);
+  const [myScore, setMyScore] = useState<number>(INITIAL_TRUST_SCORE);
+  const [partnerScore, setPartnerScore] = useState<number>(INITIAL_TRUST_SCORE);
   const heartScale = useRef(new Animated.Value(1)).current;
+
+  const coupleScore = Math.round((myScore + partnerScore) / 2);
+
+  const myBirdState: BirdState = scoreToBirdState(myScore);
+  const partnerBirdState: BirdState = scoreToBirdState(partnerScore);
+
+  const partnerMember = useMemo(() => {
+    if (!user || !myCouple) return null;
+    return myCouple.members.find((m) => m.userId !== user.id) ?? null;
+  }, [user, myCouple]);
+
+  const myName = user?.username ?? '나';
+  const partnerName = partnerMember?.username ?? '상대';
 
   useEffect(() => {
     Animated.loop(
@@ -199,6 +203,56 @@ export default function TimelineScreen() {
     ).start();
   }, [heartScale]);
 
+  // 활동 피드 로드 + 15초 폴링
+  useEffect(() => {
+    if (!user || !myCouple) {
+      setActivities([]);
+      return;
+    }
+    let cancelled = false;
+    const load = async () => {
+      const items = await fetchActivityFeed(myCouple.id, user.id);
+      if (!cancelled) setActivities(items);
+    };
+    void load();
+    const id = setInterval(load, 15_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [user, myCouple]);
+
+  // 양방향 신뢰도 점수 폴링 (각 병아리 상태 + 중앙 하트 평균)
+  // myScore = partner→me (홈 점수와 동일, 내 신뢰도)
+  // partnerScore = me→partner (내가 상대를 신뢰하는 정도)
+  useEffect(() => {
+    if (!user || !myCouple || !partnerMember) {
+      setMyScore(INITIAL_TRUST_SCORE);
+      setPartnerScore(INITIAL_TRUST_SCORE);
+      return;
+    }
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const [meToPartner, partnerToMe] = await Promise.all([
+          getTrustScore(myCouple.id, user.id, partnerMember.userId),
+          getTrustScore(myCouple.id, partnerMember.userId, user.id),
+        ]);
+        if (cancelled) return;
+        setMyScore(partnerToMe);
+        setPartnerScore(meToPartner);
+      } catch {
+        // ignore
+      }
+    };
+    void load();
+    const id = setInterval(load, 15_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [user, myCouple, partnerMember]);
+
   // 병아리 클릭: 같은 병아리 재클릭 시 메인 타임라인으로 복귀
   const handleBirdPress = (bird: 'mine' | 'opponent') => {
     setSelectedBird((prev) => (prev === bird ? null : bird));
@@ -206,8 +260,8 @@ export default function TimelineScreen() {
   };
 
   const sorted = useMemo(
-    () => [...MOCK_ACTIVITIES].sort((a, b) => b.date.localeCompare(a.date)),
-    []
+    () => [...activities].sort((a, b) => b.date.localeCompare(a.date)),
+    [activities]
   );
 
   // 메인 타임라인 카드
@@ -236,7 +290,7 @@ export default function TimelineScreen() {
         <View style={styles.heartWrap}>
           <Animated.View style={[styles.heartContainer, { transform: [{ scale: heartScale }] }]}>
             <Ionicons name="heart" size={72} color="#fac5bc" />
-            <Text style={styles.heartScore}>87</Text>
+            <Text style={styles.heartScore}>{coupleScore}</Text>
           </Animated.View>
         </View>
 
@@ -250,11 +304,11 @@ export default function TimelineScreen() {
             {selectedBird === 'mine' && <View style={styles.birdSelectedRing} />}
             <View style={styles.birdClip}>
               <View style={[styles.birdInner, { left: OFFSET_L, top: OFFSET_T }]}>
-                <BirdCharacter state="healthy" />
+                <BirdCharacter state={myBirdState} />
               </View>
             </View>
             <Text style={[styles.birdLabel, selectedBird === 'mine' && styles.birdLabelActive]}>
-              내 병아리
+              {myName}
             </Text>
           </Pressable>
 
@@ -267,11 +321,11 @@ export default function TimelineScreen() {
             {selectedBird === 'opponent' && <View style={styles.birdSelectedRing} />}
             <View style={styles.birdClip}>
               <View style={[styles.birdInner, { left: OFFSET_L, top: OFFSET_T }]}>
-                <BirdCharacter state="uneasy" />
+                <BirdCharacter state={partnerBirdState} />
               </View>
             </View>
             <Text style={[styles.birdLabel, selectedBird === 'opponent' && styles.birdLabelActive]}>
-              상대방 병아리
+              {partnerName}
             </Text>
           </Pressable>
         </View>

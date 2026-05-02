@@ -4,6 +4,7 @@ import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View 
 
 import ApologyScoreCard from '@/src/components/ApologyScoreCard';
 import TopBar from '@/src/components/TopBar';
+import { getSupabaseClient, isSupabaseConfigured } from '@/src/lib/supabaseClient';
 import { loadApology, saveApology } from '@/src/storage/apology-storage';
 import { type ApologyScoreResult, scoreApology } from '@/src/utils/apologyScoring';
 import { formatDateLabel, getSeoulDateKey } from '@/src/utils/date';
@@ -22,6 +23,7 @@ export default function MessageScreen() {
   const [draft, setDraft] = useState('');
   const [analysis, setAnalysis] = useState<ApologyScoreResult | null>(null);
   const [evaluating, setEvaluating] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState<string>('');
 
   useEffect(() => {
@@ -36,7 +38,8 @@ export default function MessageScreen() {
   }, [todayKey]);
 
   const buttonDisabled = title.trim().length === 0 || draft.trim().length === 0;
-  const evaluateDisabled = buttonDisabled || evaluating;
+  const evaluateDisabled = buttonDisabled || evaluating || submitting;
+  const registerDisabled = buttonDisabled || submitting;
 
   const handleEvaluate = async () => {
     if (evaluating) return;
@@ -60,13 +63,60 @@ export default function MessageScreen() {
   };
 
   const handleRegister = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+    setNotice('');
+
     const record = { title: title.trim(), body: draft.trim() };
-    await saveApology(todayKey, record);
-    setTitle('');
-    setDraft('');
-    setAnalysis(null);
-    setNotice('사과문이 등록되었습니다. 사과문 기록 페이지로 이동합니다.');
-    router.push('/(tabs)/message/history');
+
+    try {
+      // 1. AI 점수 확보 (없으면 자동 평가)
+      let aiScore = analysis?.totalScore;
+      if (aiScore == null) {
+        const result = await scoreApology(
+          record.body,
+          OPENAI_API_KEY
+            ? { openAI: { apiKey: OPENAI_API_KEY, model: OPENAI_MODEL } }
+            : undefined,
+        );
+        setAnalysis(result);
+        aiScore = result.totalScore;
+      }
+
+      // 2. Supabase 제출 → 상대 검토 대기 상태로 저장
+      if (isSupabaseConfigured()) {
+        const supabase = getSupabaseClient();
+        const { data, error } = await supabase
+          .rpc('submit_apology', {
+            p_title: record.title,
+            p_body: record.body,
+            p_ai_score: aiScore,
+          })
+          .single<{
+            apology_id: string;
+            trust_delta: number;
+            cooldown_remaining_seconds: number;
+          }>();
+        if (error || !data) {
+          setNotice(error?.message ?? '사과문 제출에 실패했어요.');
+          return;
+        }
+        setNotice(
+          `사과문이 보내졌어요. 상대 검토를 기다려주세요. 수락 시 신뢰도 +${data.trust_delta} 회복돼요.`,
+        );
+      } else {
+        setNotice('사과문이 등록됐어요. (백엔드 미설정 — 점수 회복 미반영)');
+      }
+
+      // 3. 로컬 캐시 + 폼 정리 + 기록 페이지 이동
+      await saveApology(todayKey, record);
+      setTitle('');
+      setDraft('');
+      setAnalysis(null);
+      setTimeout(() => router.push('/(tabs)/message/history'), 1200);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -107,10 +157,10 @@ export default function MessageScreen() {
             <Text style={styles.buttonText}>{evaluating ? '채점 중…' : 'AI 평가하기'}</Text>
           </Pressable>
           <Pressable
-            style={[styles.button, buttonDisabled && styles.buttonDisabled]}
-            disabled={buttonDisabled}
+            style={[styles.button, registerDisabled && styles.buttonDisabled]}
+            disabled={registerDisabled}
             onPress={handleRegister}>
-            <Text style={styles.buttonText}>사과문 등록</Text>
+            <Text style={styles.buttonText}>{submitting ? '등록 중…' : '사과문 등록'}</Text>
           </Pressable>
         </View>
 
