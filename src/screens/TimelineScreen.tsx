@@ -1,6 +1,8 @@
-import React from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { Animated, Easing, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+import { Ionicons } from '@expo/vector-icons';
 
 import BirdCharacter from '@/src/components/BirdCharacter';
 import Nest from '@/src/components/Nest';
@@ -32,6 +34,28 @@ const OFFSET_L = (BIRD_W / 2) * (BIRD_SCALE - 1); // -55
 const OFFSET_T = (BIRD_H / 2) * (BIRD_SCALE - 1); // -52.5
 
 export default function TimelineScreen() {
+  const heartScale = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(heartScale, {
+          toValue: 1.15,
+          duration: 350,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(heartScale, {
+          toValue: 1,
+          duration: 450,
+          easing: Easing.in(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.delay(800),
+      ])
+    ).start();
+  }, [heartScale]);
+
   const stoneStatusColor = (isUsing: boolean) => (isUsing ? '#d9534f' : '#5cb85c');
 
   const spyStatusColor = (status: SpyRecord['status']) => {
@@ -53,6 +77,14 @@ export default function TimelineScreen() {
               <View style={styles.nestScaleX}>
                 <Nest state="healthy" />
               </View>
+            </View>
+
+            {/* 커플 신뢰 점수 하트 */}
+            <View style={styles.heartWrap}>
+              <Animated.View style={[styles.heartContainer, { transform: [{ scale: heartScale }] }]}>
+                <Ionicons name="heart" size={72} color="#fac5bc" />
+                <Text style={styles.heartScore}>87</Text>
+              </Animated.View>
             </View>
 
             {/* 새들 — birdsRow bottom 값으로 둥지 안에 정확히 앉힘 */}
@@ -185,6 +217,27 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#5d4e45',
+  },
+  heartWrap: {
+    position: 'absolute',
+    top: 6,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 3,
+  },
+  heartContainer: {
+    width: 150,
+    height: 82,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heartScore: {
+    position: 'absolute',
+    top: 22,
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#e05040',
   },
 
   // 공통 섹션
