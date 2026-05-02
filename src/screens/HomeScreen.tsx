@@ -23,12 +23,8 @@ import {
   reviewApology,
   type ApologyRow,
 } from '@/src/lib/apologies';
-import {
-  addTrustEvent,
-  getTrustScore,
-  INITIAL_TRUST_SCORE,
-  updateTrustScore,
-} from '@/src/lib/trustScore';
+import { addTrustEvent, getTrustScore, INITIAL_TRUST_SCORE } from '@/src/lib/trustScore';
+import { getSupabaseClient } from '@/src/lib/supabaseClient';
 import {
   createVerificationRequest,
   getPendingRequestForTarget,
@@ -327,23 +323,21 @@ export default function HomeScreen() {
     showHeroToast('사진을 전송했어요.');
   }, [showHeroToast]);
 
-  // ── 사진 수락 (+5) ────────────────────────────────────────────────────────
+  // ── 사진 수락 (+5, 양방향 동시 갱신) ─────────────────────────────────────
 
   const handlePhotoAccepted = useCallback(async () => {
     if (!reviewRequest || !user || !myCouple || !partnerId) return;
     try {
       await reviewVerificationRequest(reviewRequest.id, 'accepted');
-      const newScore = await updateTrustScore(myCouple.id, user.id, partnerId, 5);
-      await addTrustEvent({
-        coupleId: myCouple.id,
-        actorId: user.id,
-        targetUserId: partnerId,
-        type: 'verification_accepted',
-        delta: 5,
-        message: '사진을 수락해서 신뢰도가 올라갔어요.',
-        relatedRequestId: reviewRequest.id,
+      const supabase = getSupabaseClient();
+      const { data: newScore, error } = await supabase.rpc('apply_couple_trust_delta', {
+        p_other_user_id: partnerId,
+        p_delta: 5,
+        p_event_type: 'verification_accepted',
+        p_message: '사진을 수락해서 신뢰도가 올라갔어요.',
       });
-      setTrustScore(newScore);
+      if (error) throw error;
+      if (typeof newScore === 'number') setTrustScore(newScore);
       setReviewModalOpen(false);
       showHeroToast('사진을 수락했어요. 신뢰도가 올라갔어요.');
     } catch {
