@@ -1,17 +1,35 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Animated, Easing, PanResponder, StyleSheet, View } from 'react-native';
 
 const MIN_THROW_DISTANCE = 25;
 
 type Props = {
   onThrow?: () => void;
+  highlighted?: boolean;
 };
 
-export default function DraggablePebble({ onThrow }: Props) {
+export default function DraggablePebble({ onThrow, highlighted = false }: Props) {
   const position = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
   const rotate = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(1)).current;
+  const glowOpacity = useRef(new Animated.Value(0)).current;
   const isThrowingRef = useRef(false);
+  const glowLoopRef = useRef<Animated.CompositeAnimation | null>(null);
+
+  useEffect(() => {
+    if (highlighted) {
+      glowLoopRef.current = Animated.loop(
+        Animated.sequence([
+          Animated.timing(glowOpacity, { toValue: 1, duration: 380, useNativeDriver: true }),
+          Animated.timing(glowOpacity, { toValue: 0.15, duration: 380, useNativeDriver: true }),
+        ])
+      );
+      glowLoopRef.current.start();
+    } else {
+      glowLoopRef.current?.stop();
+      Animated.timing(glowOpacity, { toValue: 0, duration: 200, useNativeDriver: true }).start();
+    }
+  }, [highlighted, glowOpacity]);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -111,11 +129,9 @@ export default function DraggablePebble({ onThrow }: Props) {
           ],
         },
       ]}>
-      {/* highlight */}
+      <Animated.View style={[styles.glow, { opacity: glowOpacity }]} pointerEvents="none" />
       <View style={styles.highlight} />
-      {/* shadow grain */}
       <View style={styles.shadowSpot} />
-      {/* surface texture */}
       <View style={styles.texture} />
     </Animated.View>
   );
@@ -139,6 +155,15 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.38,
     shadowOffset: { width: 2, height: 4 },
     shadowRadius: 5,
+  },
+  glow: {
+    position: 'absolute',
+    top: -6,
+    left: -6,
+    right: -6,
+    bottom: -6,
+    borderRadius: 24,
+    backgroundColor: 'rgba(232, 160, 120, 0.55)',
   },
   highlight: {
     position: 'absolute',

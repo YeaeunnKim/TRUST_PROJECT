@@ -71,7 +71,7 @@ export default function HomeActionButtons() {
 
   const handleSpyPress = useCallback(async () => {
     try {
-      const req = await createVerificationRequest(MOCK_REQUESTER_ID, MOCK_TARGET_ID);
+      const req = await createVerificationRequest('mock_couple', MOCK_REQUESTER_ID, MOCK_TARGET_ID);
       setCurrentRequestId(req.id);
       setCameraModalOpen(true);
     } catch {

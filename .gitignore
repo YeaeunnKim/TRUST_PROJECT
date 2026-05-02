@@ -30,8 +30,17 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
+# local env files (Supabase URL/Key 포함 — 절대 커밋하지 말 것)
+.env
+.env.local
 .env*.local
+.env.development.local
+.env.production.local
+
+# Supabase CLI 로컬 상태 (supabase init 생성 파일)
+.supabase/
+supabase/.temp/
+supabase/config.toml
 
 # typescript
 *.tsbuildinfo
