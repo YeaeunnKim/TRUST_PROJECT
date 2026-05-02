@@ -1,6 +1,5 @@
 ﻿import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, SafeAreaView, StyleSheet, Switch, Text, View } from 'react-native';
 
@@ -16,7 +15,6 @@ const VIBRATION_KEY = 'birdguard.settings.vibration';
 const NOTIFICATION_KEY = 'birdguard.settings.notification';
 
 export default function SettingsMenu({ visible, onClose }: SettingsMenuProps) {
-  const router = useRouter();
   const { signOut } = useAuth();
   const [vibrationOn, setVibrationOn] = useState(true);
   const [notificationOn, setNotificationOn] = useState(true);
@@ -52,11 +50,6 @@ export default function SettingsMenu({ visible, onClose }: SettingsMenuProps) {
   }, [slideX, visible]);
 
   if (!visible) return null;
-
-  const handleProfile = () => {
-    onClose();
-    router.push('/(tabs)/profile/edit');
-  };
 
   const handleLogout = async () => {
     onClose();
@@ -106,9 +99,6 @@ export default function SettingsMenu({ visible, onClose }: SettingsMenuProps) {
           </View>
 
           <Text style={[styles.sectionTitle, styles.sectionSpacing]}>개인/보안</Text>
-          <Pressable style={styles.itemButton} onPress={handleProfile} accessibilityRole="button">
-            <Text style={styles.itemText}>내 프로필 수정</Text>
-          </Pressable>
           <Pressable style={[styles.itemButton, styles.logoutButton]} onPress={() => void handleLogout()} accessibilityRole="button">
             <Text style={styles.logoutText}>로그아웃</Text>
           </Pressable>

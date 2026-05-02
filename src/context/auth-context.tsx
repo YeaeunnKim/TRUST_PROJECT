@@ -16,8 +16,8 @@ type AuthResult = {
 type AuthContextValue = {
   user: AuthUser | null;
   isLoading: boolean;
-  signIn: (username: string, password: string) => Promise<AuthResult>;
-  signUp: (username: string, password: string) => Promise<AuthResult>;
+  signIn: (loginId: string, password: string) => Promise<AuthResult>;
+  signUp: (loginId: string, password: string, displayName: string) => Promise<AuthResult>;
   signInAsGuest: () => Promise<void>;
   signOut: () => Promise<void>;
 };
@@ -102,47 +102,52 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const signUp = useCallback(async (rawUsername: string, password: string): Promise<AuthResult> => {
-    if (!isSupabaseConfigured()) return { ok: false, message: 'Supabase 설정이 필요해요.' };
-    const username = normalizeUsername(rawUsername);
-    const usernameErr = validateUsername(username);
-    if (usernameErr) return { ok: false, message: usernameErr };
-    const passwordErr = validatePassword(password);
-    if (passwordErr) return { ok: false, message: passwordErr };
+  const signUp = useCallback(
+    async (rawLoginId: string, password: string, rawDisplayName: string): Promise<AuthResult> => {
+      if (!isSupabaseConfigured()) return { ok: false, message: 'Supabase 설정이 필요해요.' };
+      const loginId = normalizeUsername(rawLoginId);
+      const loginIdErr = validateUsername(loginId);
+      if (loginIdErr) return { ok: false, message: loginIdErr };
+      const passwordErr = validatePassword(password);
+      if (passwordErr) return { ok: false, message: passwordErr };
+      const displayName = rawDisplayName.trim();
+      if (!displayName) return { ok: false, message: '이름을 입력해주세요.' };
 
-    const supabase = getSupabaseClient();
-    const email = usernameToEmail(username);
-    const { data: existing } = await supabase.auth.getUser();
+      const supabase = getSupabaseClient();
+      const email = usernameToEmail(loginId);
+      const { data: existing } = await supabase.auth.getUser();
 
-    if (existing.user?.is_anonymous) {
-      // 익명 세션을 정식 계정으로 업그레이드 → user.id 보존 (커플 데이터 유지)
-      const { error } = await supabase.auth.updateUser({
+      if (existing.user?.is_anonymous) {
+        // 익명 세션을 정식 계정으로 업그레이드 → user.id 보존 (커플 데이터 유지)
+        const { error } = await supabase.auth.updateUser({
+          email,
+          password,
+          data: { username: displayName },
+        });
+        if (error) return { ok: false, message: authErrorMessage(error) };
+        return { ok: true };
+      }
+
+      const { error } = await supabase.auth.signUp({
         email,
         password,
-        data: { username },
+        options: { data: { username: displayName } },
       });
       if (error) return { ok: false, message: authErrorMessage(error) };
       return { ok: true };
-    }
+    },
+    [],
+  );
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { username } },
-    });
-    if (error) return { ok: false, message: authErrorMessage(error) };
-    return { ok: true };
-  }, []);
-
-  const signIn = useCallback(async (rawUsername: string, password: string): Promise<AuthResult> => {
+  const signIn = useCallback(async (rawLoginId: string, password: string): Promise<AuthResult> => {
     if (!isSupabaseConfigured()) return { ok: false, message: 'Supabase 설정이 필요해요.' };
-    const username = normalizeUsername(rawUsername);
-    const usernameErr = validateUsername(username);
-    if (usernameErr) return { ok: false, message: usernameErr };
+    const loginId = normalizeUsername(rawLoginId);
+    const loginIdErr = validateUsername(loginId);
+    if (loginIdErr) return { ok: false, message: loginIdErr };
 
     const supabase = getSupabaseClient();
     const { error } = await supabase.auth.signInWithPassword({
-      email: usernameToEmail(username),
+      email: usernameToEmail(loginId),
       password,
     });
     if (error) return { ok: false, message: authErrorMessage(error) };
