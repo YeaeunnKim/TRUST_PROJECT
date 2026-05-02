@@ -1,7 +1,7 @@
 ﻿import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { router } from 'expo-router';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
@@ -15,6 +15,8 @@ import {
 } from 'react-native';
 
 import BirdCharacter, { type BirdState } from '@/src/components/BirdCharacter';
+import DraggablePebble from '@/src/components/home/DraggablePebble';
+import FloatingActionButtons from '@/src/components/home/FloatingActionButtons';
 import Nest from '@/src/components/Nest';
 import SettingsMenu from '@/src/components/SettingsMenu';
 import TopBar from '@/src/components/TopBar';
@@ -70,7 +72,11 @@ export default function HomeScreen() {
   const [importMessage, setImportMessage] = useState('');
   const [importError, setImportError] = useState('');
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [heroToast, setHeroToast] = useState<string | null>(null);
   const { addOrUpdateToday, records } = useDayRecords();
+
+  const birdShake = useRef(new Animated.Value(0)).current;
+  const heroToastOpacity = useRef(new Animated.Value(0)).current;
 
   const eggCrack = useRef(new Animated.Value(0)).current;
   const eggOverlayScale = useRef(new Animated.Value(0.9)).current;
@@ -148,6 +154,43 @@ export default function HomeScreen() {
       setCycleIndex((prev) => (prev + 1) % cycleStates.length);
     }
   }, [todayRecord?.learned, todayRecord?.updatedAt, cycleStates.length]);
+
+  const showHeroToast = useCallback(
+    (msg: string) => {
+      setHeroToast(msg);
+      heroToastOpacity.setValue(0);
+      Animated.sequence([
+        Animated.timing(heroToastOpacity, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.delay(1600),
+        Animated.timing(heroToastOpacity, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start(() => setHeroToast(null));
+    },
+    [heroToastOpacity]
+  );
+
+  const triggerChickReaction = useCallback(() => {
+    birdShake.setValue(0);
+    Animated.sequence([
+      Animated.timing(birdShake, { toValue: 7, duration: 55, useNativeDriver: true }),
+      Animated.timing(birdShake, { toValue: -7, duration: 55, useNativeDriver: true }),
+      Animated.timing(birdShake, { toValue: 5, duration: 50, useNativeDriver: true }),
+      Animated.timing(birdShake, { toValue: -3, duration: 50, useNativeDriver: true }),
+      Animated.timing(birdShake, { toValue: 0, duration: 50, useNativeDriver: true }),
+    ]).start();
+  }, [birdShake]);
+
+  const handlePebbleThrow = useCallback(() => {
+    triggerChickReaction();
+    showHeroToast('병아리에게 콕 알림을 보냈어요.');
+  }, [triggerChickReaction, showHeroToast]);
 
   const openNotepad = () => {
     if (!eggAvailable || eggCracking) return;
@@ -394,9 +437,15 @@ export default function HomeScreen() {
                   onEggPress={openNotepad}
                 />
               </View>
-              <View style={[styles.birdWrap, learnedToday && styles.birdWrapLearned]} ref={birdRef}>
+              <Animated.View
+                style={[
+                  styles.birdWrap,
+                  learnedToday && styles.birdWrapLearned,
+                  { transform: [{ translateX: birdShake }] },
+                ]}
+                ref={birdRef as React.RefObject<View>}>
                 <BirdCharacter state={visualState} mouthOpen={mouthOpen} />
-              </View>
+              </Animated.View>
             </View>
 
             {feedReady && !feedConsumed ? (
@@ -425,6 +474,17 @@ export default function HomeScreen() {
                     />
                   ))}
                 </View>
+              </Animated.View>
+            ) : null}
+
+            <FloatingActionButtons onToast={showHeroToast} />
+            <DraggablePebble onThrow={handlePebbleThrow} />
+
+            {heroToast ? (
+              <Animated.View
+                style={[styles.heroToast, { opacity: heroToastOpacity }]}
+                pointerEvents="none">
+                <Text style={styles.heroToastText}>{heroToast}</Text>
               </Animated.View>
             ) : null}
           </Pressable>
@@ -554,7 +614,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     backgroundColor: 'rgba(241, 220, 229, 0.45)',
     borderRadius: 26,
-    overflow: 'hidden',
+    overflow: 'visible',
   },
   sceneWrap: {
     width: '100%',
@@ -698,6 +758,24 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: {
     height: 94,
+  },
+  heroToast: {
+    position: 'absolute',
+    bottom: 16,
+    left: 20,
+    right: 20,
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 18,
+    backgroundColor: 'rgba(58, 46, 36, 0.84)',
+    zIndex: 40,
+    elevation: 40,
+  },
+  heroToastText: {
+    fontSize: 12,
+    color: '#f8f0eb',
+    textAlign: 'center',
   },
   eggOverlay: {
     position: 'absolute',
