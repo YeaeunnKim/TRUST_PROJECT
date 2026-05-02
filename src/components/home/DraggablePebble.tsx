@@ -125,7 +125,7 @@ const styles = StyleSheet.create({
   pebble: {
     position: 'absolute',
     right: 28,
-    bottom: 42,
+    bottom: 12,
     width: 42,
     height: 34,
     borderTopLeftRadius: 22,
