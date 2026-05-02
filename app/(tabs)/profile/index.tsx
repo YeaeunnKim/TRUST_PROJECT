@@ -1,8 +1,8 @@
-﻿import React, { useState } from 'react';
-import { Image, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { Image, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import TopBar from '@/src/components/TopBar';
 import SettingsMenu from '@/src/components/SettingsMenu';
+import TopBar from '@/src/components/TopBar';
 import { useProfile } from '@/src/context/profile-context';
 
 export default function ProfileScreen() {
@@ -10,7 +10,7 @@ export default function ProfileScreen() {
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const hasProfile = Boolean(
-    profile && (profile.name || profile.age || profile.job || profile.country || profile.nativeLanguage || profile.howWeMet || profile.photoUri)
+    profile && (profile.name || profile.age || profile.relationshipStartDate || profile.photoUri),
   );
 
   return (
@@ -19,7 +19,7 @@ export default function ProfileScreen() {
         <TopBar onPressSettings={() => setSettingsOpen(true)} />
 
         <Text style={styles.title}>프로필</Text>
-        <Text style={styles.subtitle}>상대의 정보를 차분히 기록해두세요.</Text>
+        <Text style={styles.subtitle}>내 정보를 차분히 기록해두세요.</Text>
 
         <View style={styles.card}>
           <View style={styles.photoRow}>
@@ -36,33 +36,19 @@ export default function ProfileScreen() {
 
               <Text style={styles.infoLabel}>나이</Text>
               <Text style={styles.infoValue}>{profile?.age || '—'}</Text>
-
-              <Text style={styles.infoLabel}>직업</Text>
-              <Text style={styles.infoValue}>{profile?.job || '—'}</Text>
-            </View>
-          </View>
-
-          <View style={styles.infoRow}>
-            <View style={styles.infoBlock}>
-              <Text style={styles.infoLabel}>국가</Text>
-              <Text style={styles.infoValue}>{profile?.country || '—'}</Text>
-            </View>
-            <View style={styles.infoBlock}>
-              <Text style={styles.infoLabel}>모국어</Text>
-              <Text style={styles.infoValue}>{profile?.nativeLanguage || '—'}</Text>
             </View>
           </View>
 
           <View style={styles.infoBlock}>
-            <Text style={styles.infoLabel}>어떻게 만났나요?</Text>
-            <Text style={styles.infoValue}>{profile?.howWeMet || '—'}</Text>
+            <Text style={styles.infoLabel}>연애 시작일</Text>
+            <Text style={styles.infoValue}>{profile?.relationshipStartDate || '—'}</Text>
           </View>
         </View>
 
         {!hasProfile ? (
-          <Text style={styles.emptyText}>설정에서 상대 정보 수정을 선택해 기록을 시작해보세요.</Text>
+          <Text style={styles.emptyText}>설정에서 내 프로필 수정을 선택해 기록을 시작해보세요.</Text>
         ) : (
-          <Text style={styles.hintText}>수정은 설정에서 상대 정보 수정으로 진행돼요.</Text>
+          <Text style={styles.hintText}>수정은 설정에서 내 프로필 수정으로 진행돼요.</Text>
         )}
       </ScrollView>
 
@@ -121,12 +107,7 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 4,
   },
-  infoRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
   infoBlock: {
-    flex: 1,
     gap: 4,
   },
   infoLabel: {

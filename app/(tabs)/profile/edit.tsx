@@ -1,4 +1,4 @@
-﻿import * as ImagePicker from 'expo-image-picker';
+import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -6,22 +6,22 @@ import { Image, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput
 
 import TopBar from '@/src/components/TopBar';
 import { useProfile } from '@/src/context/profile-context';
-import type { Profile } from '@/src/models/profile';
+import { emptyProfile, type Profile } from '@/src/models/profile';
 
-const emptyProfile: Profile = {
-  name: '',
-  age: '',
-  job: '',
-  country: '',
-  nativeLanguage: '',
-  howWeMet: '',
-  photoUri: undefined,
-};
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+function isValidDate(value: string): boolean {
+  if (!value) return true; // optional
+  if (!DATE_PATTERN.test(value)) return false;
+  const d = new Date(value);
+  return !isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value;
+}
 
 export default function ProfileEditScreen() {
   const router = useRouter();
   const { profile, updateProfile } = useProfile();
   const [draft, setDraft] = useState<Profile>(emptyProfile);
+  const [dateError, setDateError] = useState('');
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -34,10 +34,11 @@ export default function ProfileEditScreen() {
     (next: Profile) => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
       saveTimer.current = setTimeout(() => {
+        if (!isValidDate(next.relationshipStartDate)) return;
         void updateProfile(next);
       }, 400);
     },
-    [updateProfile]
+    [updateProfile],
   );
 
   useEffect(() => {
@@ -49,6 +50,9 @@ export default function ProfileEditScreen() {
   const updateField = (key: keyof Profile, value: string) => {
     setDraft((prev) => {
       const next = { ...prev, [key]: value };
+      if (key === 'relationshipStartDate') {
+        setDateError(isValidDate(value) ? '' : '연애 시작일은 YYYY-MM-DD 형식이에요. 예: 2024-03-15');
+      }
       queueSave(next);
       return next;
     });
@@ -70,6 +74,14 @@ export default function ProfileEditScreen() {
     }
   };
 
+  const handleSave = () => {
+    if (!isValidDate(draft.relationshipStartDate)) {
+      setDateError('연애 시작일은 YYYY-MM-DD 형식이에요. 예: 2024-03-15');
+      return;
+    }
+    void updateProfile(draft);
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
@@ -79,7 +91,7 @@ export default function ProfileEditScreen() {
           <Text style={styles.backText}>돌아가기</Text>
         </Pressable>
 
-        <Text style={styles.title}>상대 정보 수정</Text>
+        <Text style={styles.title}>내 프로필 수정</Text>
         <Text style={styles.subtitle}>입력 내용은 자동으로 저장돼요.</Text>
 
         <View style={styles.photoRow}>
@@ -99,7 +111,7 @@ export default function ProfileEditScreen() {
           <Text style={styles.label}>이름</Text>
           <TextInput
             style={styles.input}
-            placeholder="예: 민지"
+            placeholder="예: 예은"
             placeholderTextColor="#b1a39a"
             value={draft.name}
             onChangeText={(value) => updateField('name', value)}
@@ -110,59 +122,31 @@ export default function ProfileEditScreen() {
           <Text style={styles.label}>나이</Text>
           <TextInput
             style={styles.input}
-            placeholder="예: 29"
+            placeholder="예: 25"
             placeholderTextColor="#b1a39a"
+            keyboardType="number-pad"
+            maxLength={3}
             value={draft.age}
             onChangeText={(value) => updateField('age', value)}
           />
         </View>
 
         <View style={styles.fieldGroup}>
-          <Text style={styles.label}>직업</Text>
+          <Text style={styles.label}>연애 시작일</Text>
           <TextInput
             style={styles.input}
-            placeholder="예: 디자이너"
+            placeholder="YYYY-MM-DD (예: 2024-03-15)"
             placeholderTextColor="#b1a39a"
-            value={draft.job}
-            onChangeText={(value) => updateField('job', value)}
+            keyboardType="numbers-and-punctuation"
+            maxLength={10}
+            autoCapitalize="none"
+            value={draft.relationshipStartDate}
+            onChangeText={(value) => updateField('relationshipStartDate', value)}
           />
+          {dateError ? <Text style={styles.errorText}>{dateError}</Text> : null}
         </View>
 
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>국가</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="예: 캐나다"
-            placeholderTextColor="#b1a39a"
-            value={draft.country}
-            onChangeText={(value) => updateField('country', value)}
-          />
-        </View>
-
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>모국어</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="예: 영어"
-            placeholderTextColor="#b1a39a"
-            value={draft.nativeLanguage}
-            onChangeText={(value) => updateField('nativeLanguage', value)}
-          />
-        </View>
-
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>어떻게 만났나요?</Text>
-          <TextInput
-            style={[styles.input, styles.inputMultiline]}
-            placeholder="예: 여행 중 커뮤니티, 지인 소개"
-            placeholderTextColor="#b1a39a"
-            value={draft.howWeMet}
-            onChangeText={(value) => updateField('howWeMet', value)}
-            multiline
-          />
-        </View>
-
-        <Pressable style={styles.saveButton} onPress={() => void updateProfile(draft)}>
+        <Pressable style={styles.saveButton} onPress={handleSave}>
           <Text style={styles.saveButtonText}>저장</Text>
         </Pressable>
       </ScrollView>
@@ -244,9 +228,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#5c4e44',
   },
-  inputMultiline: {
-    height: 80,
-    textAlignVertical: 'top',
+  errorText: {
+    fontSize: 12,
+    color: '#9c6b63',
   },
   saveButton: {
     marginTop: 6,
