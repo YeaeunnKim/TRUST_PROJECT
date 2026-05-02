@@ -34,13 +34,21 @@ function rowToRequest(row: Record<string, unknown>): VerificationRequest {
   };
 }
 
-/** Storage path → 1시간짜리 signed URL. 실패 시 undefined. */
-async function toSignedUrl(path: string): Promise<string | undefined> {
+/**
+ * Storage path → 1시간짜리 signed URL.
+ * 실패 시 undefined를 반환하고 콘솔에 원인을 출력한다.
+ */
+export async function createSignedUrlForVerification(
+  path: string,
+): Promise<string | undefined> {
   const supabase = getSupabaseClient();
   const { data, error } = await supabase.storage
     .from(BUCKET)
     .createSignedUrl(path, 60 * 60);
-  if (error || !data?.signedUrl) return undefined;
+  if (error || !data?.signedUrl) {
+    console.error('[verification] createSignedUrl 실패:', error?.message ?? 'no signedUrl', { path });
+    return undefined;
+  }
   return data.signedUrl;
 }
 
@@ -113,7 +121,7 @@ export async function getPendingRequestForTarget(
 
 /**
  * requester가 보낸 uploaded 요청 중 가장 최신 1건.
- * imagePath → fresh signed URL(1h)을 생성해 imageUrl 에 담아 반환한다.
+ * signed URL 생성은 모달 내부에서 처리하므로 여기서는 path만 반환한다.
  */
 export async function getUploadedRequestForRequester(
   requesterId: string,
@@ -131,14 +139,7 @@ export async function getUploadedRequestForRequester(
     .maybeSingle();
 
   if (!data) return null;
-
-  const req = rowToRequest(data as Record<string, unknown>);
-
-  if (req.imagePath) {
-    req.imageUrl = await toSignedUrl(req.imagePath);
-  }
-
-  return req;
+  return rowToRequest(data as Record<string, unknown>);
 }
 
 /**

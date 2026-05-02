@@ -1,10 +1,22 @@
 import { Ionicons } from '@expo/vector-icons';
-import React from 'react';
-import { Image, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Image,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+
+import { createSignedUrlForVerification } from '@/src/lib/verificationRequests';
 
 type Props = {
   visible: boolean;
-  imageUrl: string;
+  /** Storage path (e.g. "verification-requests/{id}/{ts}.jpg") or legacy full URL */
+  imagePath: string;
   onAccepted: () => void;
   onRejected: () => void;
   onClose: () => void;
@@ -12,11 +24,46 @@ type Props = {
 
 export default function VerificationReviewModal({
   visible,
-  imageUrl,
+  imagePath,
   onAccepted,
   onRejected,
   onClose,
 }: Props) {
+  const [signedUrl, setSignedUrl] = useState<string | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+
+  useEffect(() => {
+    if (!visible || !imagePath) {
+      setSignedUrl(null);
+      setLoadError(false);
+      return;
+    }
+
+    // 기존 데이터 호환: 이미 전체 URL이면 그대로 사용
+    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+      setSignedUrl(imagePath);
+      setLoadError(false);
+      return;
+    }
+
+    // Storage path → signed URL 생성
+    setIsGenerating(true);
+    setSignedUrl(null);
+    setLoadError(false);
+
+    createSignedUrlForVerification(imagePath)
+      .then((url) => {
+        if (url) {
+          setSignedUrl(url);
+        } else {
+          setLoadError(true);
+        }
+      })
+      .catch(() => setLoadError(true))
+      .finally(() => setIsGenerating(false));
+  }, [visible, imagePath]);
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
@@ -30,14 +77,39 @@ export default function VerificationReviewModal({
             <Text style={styles.title}>사진이 도착했어요</Text>
             <Text style={styles.body}>상대방이 보낸 사진을 확인해주세요.</Text>
 
-            {Platform.OS === 'web' ? (
-              <img
-                src={imageUrl}
-                style={styles.previewImg as unknown as React.CSSProperties}
-                alt="상대방 사진"
-              />
-            ) : (
-              <Image source={{ uri: imageUrl }} style={styles.previewImgNative} resizeMode="cover" />
+            {/* 로딩 */}
+            {isGenerating && (
+              <View style={styles.previewPlaceholder}>
+                <ActivityIndicator color="#c4a882" />
+                <Text style={styles.placeholderText}>사진 불러오는 중...</Text>
+              </View>
+            )}
+
+            {/* 에러 */}
+            {!isGenerating && loadError && (
+              <View style={styles.previewPlaceholder}>
+                <Ionicons name="image-outline" size={32} color="#c4a882" />
+                <Text style={styles.placeholderText}>사진을 불러올 수 없어요.</Text>
+              </View>
+            )}
+
+            {/* 이미지 */}
+            {!isGenerating && !loadError && signedUrl && (
+              Platform.OS === 'web' ? (
+                <img
+                  src={signedUrl}
+                  style={styles.previewImg as unknown as React.CSSProperties}
+                  alt="상대방 사진"
+                  onError={() => setLoadError(true)}
+                />
+              ) : (
+                <Image
+                  source={{ uri: signedUrl }}
+                  style={styles.previewImgNative}
+                  resizeMode="cover"
+                  onError={() => setLoadError(true)}
+                />
+              )
             )}
 
             <View style={styles.row}>
@@ -95,6 +167,19 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   body: { fontSize: 13, color: '#7b6c62', textAlign: 'center', lineHeight: 20 },
+  previewPlaceholder: {
+    width: '100%',
+    height: 200,
+    borderRadius: 14,
+    backgroundColor: 'rgba(196, 168, 130, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  placeholderText: {
+    fontSize: 13,
+    color: '#9a8a7d',
+  },
   primaryBtn: {
     flexDirection: 'row',
     alignItems: 'center',

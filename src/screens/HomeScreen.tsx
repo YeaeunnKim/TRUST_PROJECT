@@ -468,10 +468,10 @@ export default function HomeScreen() {
       )}
 
       {/* requester: 상대방 사진 수락/거절 */}
-      {reviewRequest?.imageUrl && (
+      {reviewRequest?.imagePath && (
         <VerificationReviewModal
           visible={reviewModalOpen}
-          imageUrl={reviewRequest.imageUrl}
+          imagePath={reviewRequest.imagePath}
           onAccepted={() => void handlePhotoAccepted()}
           onRejected={() => void handlePhotoRejected()}
           onClose={() => setReviewModalOpen(false)}

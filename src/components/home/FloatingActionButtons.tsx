@@ -50,9 +50,7 @@ const styles = StyleSheet.create({
   container: {
     position: 'absolute',
     left: 18,
-    top: 0,
-    bottom: 0,
-    justifyContent: 'center',
+    top: 28,
     alignItems: 'flex-start',
     gap: 22,
     zIndex: 15,
