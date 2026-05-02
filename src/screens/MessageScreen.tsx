@@ -1,3 +1,4 @@
+import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -13,12 +14,12 @@ const OPENAI_API_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
 const OPENAI_MODEL = process.env.EXPO_PUBLIC_OPENAI_MODEL;
 
 export default function MessageScreen() {
+  const router = useRouter();
   const todayKey = getSeoulDateKey();
   const todayLabel = formatDateLabel(todayKey);
 
   const [title, setTitle] = useState('');
   const [draft, setDraft] = useState('');
-  const [savedApology, setSavedApology] = useState<{ title: string; body: string } | null>(null);
   const [analysis, setAnalysis] = useState<ApologyScoreResult | null>(null);
   const [evaluating, setEvaluating] = useState(false);
   const [notice, setNotice] = useState<string>('');
@@ -29,7 +30,6 @@ export default function MessageScreen() {
       if (loaded) {
         setTitle(loaded.title);
         setDraft(loaded.body);
-        setSavedApology(loaded);
       }
     }
     load();
@@ -62,8 +62,11 @@ export default function MessageScreen() {
   const handleRegister = async () => {
     const record = { title: title.trim(), body: draft.trim() };
     await saveApology(todayKey, record);
-    setSavedApology(record);
-    setNotice('사과문이 등록되었습니다. 필요하면 다시 수정하고 다시 등록하세요.');
+    setTitle('');
+    setDraft('');
+    setAnalysis(null);
+    setNotice('사과문이 등록되었습니다. 사과문 기록 페이지로 이동합니다.');
+    router.push('/(tabs)/message/history');
   };
 
   return (
@@ -113,13 +116,6 @@ export default function MessageScreen() {
 
         {notice ? <Text style={styles.noticeText}>{notice}</Text> : null}
 
-        {savedApology ? (
-          <View style={styles.savedCard}>
-            <Text style={styles.savedTitle}>등록된 사과문</Text>
-            <Text style={styles.savedSubtitle}>{savedApology.title}</Text>
-            <Text style={styles.savedText}>{savedApology.body}</Text>
-          </View>
-        ) : null}
       </ScrollView>
     </SafeAreaView>
   );

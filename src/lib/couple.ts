@@ -1,99 +1,102 @@
-import type { Couple, CoupleMember } from '@/src/models/couple';
-import { loadCoupleStore, saveCoupleStore } from '@/src/storage/couple-storage';
+import { getSupabaseClient, isSupabaseConfigured } from '@/src/lib/supabaseClient';
+import type { Couple } from '@/src/models/couple';
 
-function generateId(): string {
-  return `${Math.random().toString(36).slice(2)}-${Date.now()}`;
+type CoupleRow = {
+  id: string;
+  invite_code: string;
+  created_by: string;
+  created_at: string;
+};
+
+type CoupleMemberRow = {
+  id: string;
+  couple_id: string;
+  user_id: string;
+  username: string;
+  joined_at: string;
+};
+
+function rowsToCouple(coupleRow: CoupleRow, memberRows: CoupleMemberRow[]): Couple {
+  return {
+    id: coupleRow.id,
+    inviteCode: coupleRow.invite_code,
+    createdBy: coupleRow.created_by,
+    createdAt: coupleRow.created_at,
+    members: memberRows.map((m) => ({
+      id: m.id,
+      coupleId: m.couple_id,
+      userId: m.user_id,
+      username: m.username,
+      createdAt: m.joined_at,
+    })),
+  };
 }
 
-export function generateCoupleCode(): string {
-  // 헷갈리는 문자(I, O, 0, 1) 제외
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-}
-
-export async function createCoupleInvite(userId: string, username: string): Promise<Couple> {
-  // TODO: 백엔드 연동 시 → apiFetch('/couple', { method: 'POST' }) 로 교체
-  const store = await loadCoupleStore();
-  if (store.userCoupleMap[userId]) {
-    throw new Error('이미 커플에 연결되어 있어요.');
+function ensureConfigured() {
+  if (!isSupabaseConfigured()) {
+    throw new Error(
+      'Supabase가 설정되지 않았어요. 설정 안내에 따라 .env.local을 채운 뒤 dev 서버를 재시작해 주세요.',
+    );
   }
-  const code = generateCoupleCode();
-  const coupleId = generateId();
-  const now = new Date().toISOString();
-  const member: CoupleMember = {
-    id: generateId(),
-    coupleId,
-    userId,
-    username,
-    createdAt: now,
-  };
-  const couple: Couple = {
-    id: coupleId,
-    inviteCode: code,
-    createdBy: userId,
-    createdAt: now,
-    members: [member],
-  };
-  store.couples[coupleId] = couple;
-  store.userCoupleMap[userId] = coupleId;
-  await saveCoupleStore(store);
+}
+
+export async function createCoupleInvite(username: string): Promise<Couple> {
+  ensureConfigured();
+  const supabase = getSupabaseClient();
+  const { error } = await supabase.rpc('create_couple_invite', {
+    p_username: username,
+  });
+  if (error) throw new Error(error.message);
+  const couple = await getMyCouple();
+  if (!couple) throw new Error('커플 정보를 불러오지 못했어요.');
   return couple;
 }
 
-export async function joinCoupleByCode(
-  code: string,
-  userId: string,
-  username: string
-): Promise<Couple> {
-  // TODO: 백엔드 연동 시 → apiFetch('/couple/join', { method: 'POST', body: JSON.stringify({ code }) }) 로 교체
-  const store = await loadCoupleStore();
-  if (store.userCoupleMap[userId]) {
-    throw new Error('이미 커플에 연결되어 있어요.');
-  }
-  const normalizedCode = code.trim().toUpperCase();
-  const couple = Object.values(store.couples).find((c) => c.inviteCode === normalizedCode);
-  if (!couple) {
-    throw new Error('유효하지 않은 코드예요.');
-  }
-  if (couple.members.some((m) => m.userId === userId)) {
-    throw new Error('자기 자신의 코드는 입력할 수 없어요.');
-  }
-  if (couple.members.length >= 2) {
-    throw new Error('이미 사용된 코드예요.');
-  }
-  const member: CoupleMember = {
-    id: generateId(),
-    coupleId: couple.id,
-    userId,
-    username,
-    createdAt: new Date().toISOString(),
-  };
-  couple.members.push(member);
-  store.userCoupleMap[userId] = couple.id;
-  await saveCoupleStore(store);
+export async function joinCoupleByCode(code: string, username: string): Promise<Couple> {
+  ensureConfigured();
+  const supabase = getSupabaseClient();
+  const { error } = await supabase.rpc('join_couple_by_code', {
+    p_code: code,
+    p_username: username,
+  });
+  if (error) throw new Error(error.message);
+  const couple = await getMyCouple();
+  if (!couple) throw new Error('커플 정보를 불러오지 못했어요.');
   return couple;
 }
 
-export async function getMyCouple(userId: string): Promise<Couple | null> {
-  // TODO: 백엔드 연동 시 → apiFetch<Couple | null>('/couple/me') 로 교체
-  const store = await loadCoupleStore();
-  const coupleId = store.userCoupleMap[userId];
-  if (!coupleId) return null;
-  return store.couples[coupleId] ?? null;
+export async function getMyCouple(): Promise<Couple | null> {
+  if (!isSupabaseConfigured()) return null;
+  const supabase = getSupabaseClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data: myMembership } = await supabase
+    .from('couple_members')
+    .select('couple_id')
+    .eq('user_id', user.id)
+    .maybeSingle();
+  if (!myMembership) return null;
+
+  const { data: coupleRow } = await supabase
+    .from('couples')
+    .select('*')
+    .eq('id', myMembership.couple_id)
+    .maybeSingle<CoupleRow>();
+  if (!coupleRow) return null;
+
+  const { data: memberRows } = await supabase
+    .from('couple_members')
+    .select('*')
+    .eq('couple_id', coupleRow.id);
+  return rowsToCouple(coupleRow, (memberRows ?? []) as CoupleMemberRow[]);
 }
 
-export async function disconnectCouple(userId: string): Promise<void> {
-  // TODO: 백엔드 연동 시 → apiFetch('/couple/disconnect', { method: 'DELETE' }) 로 교체
-  const store = await loadCoupleStore();
-  const coupleId = store.userCoupleMap[userId];
-  if (!coupleId) return;
-  const couple = store.couples[coupleId];
-  if (couple) {
-    couple.members = couple.members.filter((m) => m.userId !== userId);
-    if (couple.members.length === 0) {
-      delete store.couples[coupleId];
-    }
-  }
-  delete store.userCoupleMap[userId];
-  await saveCoupleStore(store);
+export async function disconnectCouple(): Promise<void> {
+  if (!isSupabaseConfigured()) return;
+  const supabase = getSupabaseClient();
+  const { error } = await supabase.rpc('disconnect_couple');
+  if (error) throw new Error(error.message);
 }

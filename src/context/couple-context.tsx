@@ -32,7 +32,7 @@ export function CoupleProvider({ children }: { children: React.ReactNode }) {
       setMyCouple(null);
       return;
     }
-    const couple = await getMyCouple(user.id);
+    const couple = await getMyCouple();
     setMyCouple(couple);
   }, [user]);
 
@@ -45,7 +45,7 @@ export function CoupleProvider({ children }: { children: React.ReactNode }) {
     setError(null);
     setIsLoading(true);
     try {
-      const couple = await createCoupleInvite(user.id, user.username);
+      const couple = await createCoupleInvite(user.username);
       setMyCouple(couple);
     } catch (e) {
       setError(e instanceof Error ? e.message : '오류가 발생했어요.');
@@ -60,7 +60,7 @@ export function CoupleProvider({ children }: { children: React.ReactNode }) {
       setError(null);
       setIsLoading(true);
       try {
-        const couple = await joinCoupleByCode(code, user.id, user.username);
+        const couple = await joinCoupleByCode(code, user.username);
         setMyCouple(couple);
       } catch (e) {
         setError(e instanceof Error ? e.message : '오류가 발생했어요.');
@@ -75,7 +75,7 @@ export function CoupleProvider({ children }: { children: React.ReactNode }) {
     if (!user) return;
     setIsLoading(true);
     try {
-      await disconnectCouple(user.id);
+      await disconnectCouple();
       setMyCouple(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : '오류가 발생했어요.');

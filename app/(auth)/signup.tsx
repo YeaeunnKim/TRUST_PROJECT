@@ -1,4 +1,4 @@
-﻿import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -17,26 +17,34 @@ import { useAuth } from '@/src/context/auth-context';
 export default function SignupScreen() {
   const router = useRouter();
   const { signUp } = useAuth();
-  const [username, setUsername] = useState('');
+  const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSignup = async () => {
     if (isSubmitting) return;
     setError('');
+
     if (password !== confirm) {
       setError('비밀번호가 서로 달라요.');
       return;
     }
+    if (!name.trim()) {
+      setError('이름을 입력해주세요.');
+      return;
+    }
+
     setIsSubmitting(true);
-    const result = await signUp(username, password);
+    const result = await signUp(loginId, password, name);
     if (!result.ok) {
       setError(result.message ?? '회원가입에 실패했어요.');
-    } else {
-      router.replace('/(auth)/login');
+      setIsSubmitting(false);
+      return;
     }
+    router.replace('/(auth)/login');
     setIsSubmitting(false);
   };
 
@@ -52,13 +60,27 @@ export default function SignupScreen() {
           <View style={styles.card}>
             <Text style={styles.label}>아이디</Text>
             <TextInput
-              value={username}
-              onChangeText={setUsername}
-              placeholder="아이디"
+              value={loginId}
+              onChangeText={setLoginId}
+              placeholder="영문/숫자/_/- 3~30자"
               placeholderTextColor="#b1a39a"
+              autoCapitalize="none"
               autoCorrect={false}
               autoComplete="off"
               textContentType="username"
+              importantForAutofill="no"
+              selectionColor="#c9b7a8"
+              style={styles.input}
+            />
+
+            <Text style={styles.label}>이름</Text>
+            <TextInput
+              value={name}
+              onChangeText={setName}
+              placeholder="서비스에서 보여질 이름"
+              placeholderTextColor="#b1a39a"
+              autoCorrect={false}
+              autoComplete="off"
               importantForAutofill="no"
               selectionColor="#c9b7a8"
               style={styles.input}
@@ -68,7 +90,7 @@ export default function SignupScreen() {
             <TextInput
               value={password}
               onChangeText={setPassword}
-              placeholder="비밀번호"
+              placeholder="6자 이상"
               placeholderTextColor="#b1a39a"
               secureTextEntry
               autoCapitalize="none"
